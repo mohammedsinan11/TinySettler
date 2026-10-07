@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TinySettler</title>
+  <meta name="description" content="Speed Catan in your browser: 1v1, first to 8 points, against a random opponent or a bot.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏝️</text></svg>">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js" defer></script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <main id="game" hidden>
+    <section id="boardWrap">
+      <svg id="board" role="img" aria-label="Game board"></svg>
+      <div id="dice" aria-live="polite"></div>
+      <div id="toast" aria-live="polite"></div>
+    </section>
+    <aside id="panel">
+      <div id="scores"></div>
+      <div id="prompt"></div>
+      <div id="timer"><div></div></div>
+      <div id="hand"></div>
+      <div id="trade"></div>
+      <div id="costs"></div>
+      <div id="devs"></div>
+      <button id="endBtn" class="primary">End turn</button>
+      <ol id="log"></ol>
+    </aside>
+  </main>
+
+  <div id="lobby" class="overlay">
+    <div class="card">
+      <h1>🏝️ TinySettler</h1>
+      <p class="tag">Speed Catan · 1v1 · first to <b>8</b> points</p>
+      <div class="sizes">
+        <button data-size="small">Small map</button>
+        <button data-size="medium">Medium map</button>
+      </div>
+      <p id="mmStatus"><span class="spinner"></span> <span id="mmText">Looking for an opponent…</span></p>
+      <button id="botNow" class="primary">Play the bot now</button>
+      <div class="hof"></div>
+      <details class="rules">
+        <summary>How to play</summary>
+        <ul>
+          <li>Place 2 settlements and 2 roads to start. Dice roll automatically.</li>
+          <li>On your turn, glowing spots are things you can afford — just click to build.</li>
+          <li>Click a resource in your hand to trade it with the bank (4:1, or better at a harbour).</li>
+          <li>Settlement 1 pt, city 2 pts, longest road (5+) 2 pts, largest army (3+ knights) 2 pts.</li>
+          <li>On a 7, discards happen automatically and the roller moves the robber.</li>
+          <li>If you can’t do anything, your turn passes by itself.</li>
+        </ul>
+      </details>
+    </div>
+  </div>
+
+  <div id="over" class="overlay" hidden>
+    <div class="card">
+      <h1 id="overTitle"></h1>
+      <p id="overText"></p>
+      <form id="nameForm" hidden>
+        <input id="nameInput" maxlength="20" placeholder="Your name" autocomplete="nickname" required>
+        <button class="primary">Save</button>
+      </form>
+      <div class="hof"></div>
+      <button id="againBtn" class="primary">Play again</button>
+    </div>
+  </div>
+</body>
+</html>

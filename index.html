@@ -6,6 +6,9 @@
   <title>TinySettler</title>
   <meta name="description" content="Speed Catan in your browser: 1v1, first to 8 points, against a random opponent or a bot.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏝️</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800;900&display=swap">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="js/main.js"></script>
 </head>
@@ -14,18 +17,37 @@
     <section id="boardWrap">
       <svg id="board" role="img" aria-label="Game board"></svg>
       <div id="dice" aria-live="polite"></div>
+      <button id="helpBtn" title="How to play" aria-label="How to play">?</button>
       <div id="toast" aria-live="polite"></div>
     </section>
     <aside id="panel">
       <div id="scores"></div>
-      <div id="prompt"></div>
-      <div id="timer"><div></div></div>
-      <div id="hand"></div>
-      <div id="trade"></div>
-      <div id="costs"></div>
-      <div id="devs"></div>
+      <div id="turn">
+        <div id="prompt"></div>
+        <div id="hint"></div>
+        <div id="timer"><div></div></div>
+      </div>
+      <section>
+        <h4>Your resources</h4>
+        <div id="hand"></div>
+      </section>
+      <section>
+        <h4>Build</h4>
+        <div id="build"></div>
+      </section>
+      <section id="tradeSec" hidden>
+        <h4>Trade with the bank</h4>
+        <div id="trade"></div>
+      </section>
+      <section id="devSec" hidden>
+        <h4>Your development cards</h4>
+        <div id="devs"></div>
+      </section>
       <button id="endBtn" class="primary">End turn</button>
-      <ol id="log"></ol>
+      <details id="logBox" open>
+        <summary>What happened</summary>
+        <ol id="log"></ol>
+      </details>
     </aside>
   </main>
 
@@ -43,15 +65,33 @@
       <details class="rules">
         <summary>How to play</summary>
         <ul>
-          <li>Place 2 settlements and 2 roads to start. Dice roll automatically.</li>
-          <li>On your turn, glowing spots are things you can afford — just click to build.</li>
-          <li>Click a resource in your hand to trade it with the bank (4:1, or better at a harbour).</li>
-          <li>Settlement 1 pt, city 2 pts, longest road (5+) 2 pts, largest army (3+ knights) 2 pts.</li>
-          <li>On a 7, discards happen automatically and the roller moves the robber.</li>
-          <li>Year of Plenty: pick the 2 resources you want.</li>
-          <li>If you can’t do anything, your turn passes by itself.</li>
+          <li><b>Goal:</b> be the first to reach <b>8 points</b>.</li>
+          <li><b>Start:</b> place 2 settlements, each with a road.</li>
+          <li><b>Resources:</b> each turn the dice roll automatically. Every tile with that number pays its resource to the settlements touching it (cities get 2).</li>
+          <li><b>Build:</b> on your turn, things you can afford glow on the board. Tap one to build it. The Build list shows what each thing costs and what you’re missing.</li>
+          <li><b>Points:</b> settlement 1, city 2, Longest Road (5+ in a row) 2, Largest Army (3+ knights) 2, Victory Point cards 1.</li>
+          <li><b>Trade:</b> swap 4 of one kind for any 1 with the bank, or 3:1 / 2:1 if you have a settlement on a harbour.</li>
+          <li><b>Robber:</b> on a 7, big hands lose half their cards automatically and the roller moves the robber, which blocks a tile and steals a card.</li>
+          <li><b>Speed:</b> if you can’t do anything, your turn passes by itself.</li>
         </ul>
       </details>
+    </div>
+  </div>
+
+  <div id="help" class="overlay" hidden>
+    <div class="card rules">
+      <h1>How to play</h1>
+      <ul>
+        <li><b>Goal:</b> be the first to reach <b>8 points</b>.</li>
+        <li><b>Start:</b> place 2 settlements, each with a road.</li>
+        <li><b>Resources:</b> each turn the dice roll automatically. Every tile with that number pays its resource to the settlements touching it (cities get 2).</li>
+        <li><b>Build:</b> on your turn, things you can afford glow on the board. Tap one to build it. The Build list shows what each thing costs and what you’re missing.</li>
+        <li><b>Points:</b> settlement 1, city 2, Longest Road (5+ in a row) 2, Largest Army (3+ knights) 2, Victory Point cards 1.</li>
+        <li><b>Trade:</b> swap 4 of one kind for any 1 with the bank, or 3:1 / 2:1 if you have a settlement on a harbour.</li>
+        <li><b>Robber:</b> on a 7, big hands lose half their cards automatically and the roller moves the robber, which blocks a tile and steals a card.</li>
+        <li><b>Speed:</b> if you can’t do anything, your turn passes by itself.</li>
+      </ul>
+      <button class="primary" data-close>Got it</button>
     </div>
   </div>
 

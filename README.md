@@ -9,7 +9,7 @@ Open the page and you're matched with a random online opponent within ~9 seconds
 - **Maps:** *Small* is 1 centre hex with one ring around it (7 hexes, 3 harbours). *Medium* is 2 centre hexes with one ring around them (10 hexes, 4 harbours). No desert.
 - **Setup:** 2 settlements and 2 roads each, in snake order. Your second settlement gives you its starting resources.
 - **Automatic:** dice rolls, resource payouts, discarding on a 7 (you drop your biggest piles), stealing (there's only one opponent), and **passing your turn when you have nothing left to do**.
-- **Your decisions:** where to build, bank/harbour trades (click a resource in your hand), buying and playing development cards, which 2 resources Year of Plenty gives you, and where the robber goes.
+- **Your decisions:** where to build, bank/harbour trades (in the "Trade with the bank" section), buying and playing development cards, which 2 resources Year of Plenty gives you, and where the robber goes.
 - **Scoring:** settlement 1, city 2, Longest Road (5+) 2, Largest Army (3+ knights) 2, Victory Point cards 1.
 - **Online:** 60 s per turn (30 s for setup and robber moves). If your opponent is gone for 10 s, the bot takes over their seat (they get it back if they reconnect).
 - After a win you can enter your name in the shared **Hall of Fame** (fastest wins).

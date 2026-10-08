@@ -1,6 +1,6 @@
 // A simple greedy bot. Given a state and a seat, returns the next action.
 import {
-  RES, COST, pips, afford, spotFree, legalSettles, legalRoads, upgradable, ratio, total,
+  RES, COST, pips, afford, spotFree, legalSettles, legalRoads, upgradable, ratio, total, wantedResources,
 } from './engine.js';
 
 function production(s, p) {
@@ -101,7 +101,7 @@ export function botAct(s, p) {
     const robberOnMe = s.robber >= 0 && s.hexes[s.robber].v.some(v => s.vOwn[v] === p);
     const armyChase = P.knights >= 2 && s.la !== p;
     if (P.devs.includes('knight') && (robberOnMe || armyChase || total(s.players[1 - p]) >= 5)) return { t: 'play', card: 'knight' };
-    if (P.devs.includes('plenty')) return { t: 'play', card: 'plenty' };
+    if (P.devs.includes('plenty')) return { t: 'play', card: 'plenty', res: wantedResources(s, p).slice(0, 2) };
     if (P.devs.includes('roads') && P.left.road && legalRoads(s, p, false).length) return { t: 'play', card: 'roads' };
   }
 

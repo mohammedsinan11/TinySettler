@@ -1,28 +1,25 @@
 import {
-  RES, ICON, COST, WIN_VP, DEV_NAMES, newGame, applyAction, afford, vp, total, ratio,
-  legalSettles, legalRoads, upgradable, hasAnyMove,
+  RES, ICON, COST, WIN_VP, DEV_NAMES, afford, vp, ratio, legalSettles, legalRoads, upgradable, hasAnyMove,
 } from './engine.js';
-import { botAct, autoAct } from './bot.js';
-import { findMatch } from './net.js';
+import { newTable, act, step, viewFor, turnLength } from './table.js';
+import { SERVER } from './config.js';
 
 const $ = id => document.getElementById(id);
 const R = 60;                      // hex radius in SVG units
 const SEARCH_MS = 9000;            // how long to look for a human before falling back to the bot
-const TURN_MS = 60000, SETUP_MS = 30000, HEARTBEAT_MS = 10000;
-const HOF_KEY = 'tinysettler.hof';
 const COLORS = { me: '#2f7de1', opp: '#e0533d' };
 const TILE = { wood: '#3f7d3a', brick: '#c4622d', sheep: '#9bc53d', wheat: '#e8c547', ore: '#8a8f98' };
 const DIE = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
-let S = null;            // game state
-let mode = null;         // 'bot' | 'host' | 'guest'
+// The game runs on the server, which sends us only what our seat may see.
+// Without a server (or if it can't be reached) a bot game runs in the browser.
+let S = null;            // my view of the game
 let me = 0;              // my seat
-let bots = new Set();    // seats played by the local bot
-let conn = null, peer = null, match = null;
-let tradeGive = null;
-let botTimer = 0, autoTimer = 0, turnTimer = 0;
-let deadline = 0, deadlineKey = '';
-let lastSeen = 0, lastRoll = 0, oppLabel = 'Bot', savedResult = false;
+let oppLabel = 'Bot', online = false;
+let session = null;      // the game in progress: { act, name, close, connected, local }
+let lobbyWs = null, serverDown = !SERVER;
+let tradeGive = null, plenty = null;
+let deadline = 0, lastRoll = 0, savedResult = false;
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } },
@@ -33,8 +30,9 @@ let size = store.get('tinysettler.size') || 'small';
 
 const name = p => (p === me ? 'You' : oppLabel);
 const color = p => (p === me ? COLORS.me : COLORS.opp);
-const myTurn = () => S && S.cur === me && S.winner < 0 && !bots.has(me);
+const myTurn = () => S && S.cur === me && S.winner < 0;
 const costStr = c => RES.filter(r => c[r]).map(r => ICON[r].repeat(c[r])).join('');
+const wsUrl = path => SERVER.replace(/^http/, 'ws').replace(/\/$/, '') + path;
 
 function toast(msg, ms = 1600) {
   const t = $('toast');
@@ -44,209 +42,166 @@ function toast(msg, ms = 1600) {
   toast.t = setTimeout(() => t.classList.remove('on'), ms);
 }
 
-function send(m) {
-  try { if (conn && conn.open) conn.send(m); } catch { /* connection gone */ }
-}
-
 // ---------- lobby / matchmaking ----------
 
 function showLobby() {
-  stopTimers();
   $('over').hidden = true;
   $('lobby').hidden = false;
   document.querySelectorAll('.sizes button').forEach(b => b.classList.toggle('sel', b.dataset.size === size));
-  renderHof();
+  loadHof();
   startSearch();
 }
 
 function startSearch() {
-  if (match) match.cancel();
+  cancelSearch();
+  if (serverDown) {
+    $('mmStatus').classList.add('off');
+    $('mmText').textContent = SERVER ? 'Online play is unavailable right now.' : 'Online play is not set up yet.';
+    return;
+  }
+  $('mmStatus').classList.remove('off');
   let left = SEARCH_MS / 1000;
   $('mmText').textContent = `Looking for an opponent… ${left}s`;
-  clearInterval(startSearch.t);
-  startSearch.t = setInterval(() => {
+  startSearch.tick = setInterval(() => {
     left = Math.max(0, left - 1);
     $('mmText').textContent = left ? `Looking for an opponent… ${left}s` : 'Starting a bot game…';
   }, 1000);
-  const m = findMatch(size, SEARCH_MS);
-  match = m;
-  m.promise.then(res => {
-    if (match !== m) return; // cancelled / superseded
-    clearInterval(startSearch.t);
-    match = null;
-    if (!res) startBot();
-    else if (res.role === 'host') startHost(res);
-    else startGuest(res);
-  });
+  startSearch.timeout = setTimeout(startBot, SEARCH_MS);
+
+  const ws = new WebSocket(wsUrl(`/match?size=${size}`));
+  lobbyWs = ws;
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.k !== 'match' || lobbyWs !== ws) return;
+    cancelSearch();
+    joinGame(`/game?id=${m.game}&token=${m.token}`);
+  };
+  ws.onclose = () => {
+    if (lobbyWs !== ws) return;
+    lobbyWs = null;
+    serverDown = true;
+    startSearch();
+  };
 }
 
 function cancelSearch() {
-  clearInterval(startSearch.t);
-  if (match) { const m = match; match = null; m.cancel(); }
+  clearInterval(startSearch.tick);
+  clearTimeout(startSearch.timeout);
+  if (lobbyWs) { const ws = lobbyWs; lobbyWs = null; ws.close(); }
+}
+
+function startBot() {
+  cancelSearch();
+  if (serverDown) startLocal();
+  else joinGame(`/bot?size=${size}`);
 }
 
 function enterGame() {
   $('lobby').hidden = true;
   $('over').hidden = true;
   $('game').hidden = false;
-  tradeGive = null;
+  tradeGive = plenty = null;
   savedResult = false;
   lastRoll = 0;
-  deadlineKey = '';
 }
 
-function startBot() {
-  cancelSearch();
-  mode = 'bot';
-  me = 0;
-  bots = new Set([1]);
-  oppLabel = 'Bot';
-  conn = peer = null;
-  S = newGame({ size });
-  enterGame();
-  update();
+// Called with every new view of the game.
+function show(view, meta) {
+  if ($('game').hidden) enterGame();
+  S = view;
+  me = meta.seat;
+  oppLabel = meta.opp;
+  online = meta.online;
+  deadline = meta.remaining ? Date.now() + meta.remaining : 0;
+  render();
+  if (S.winner >= 0) setTimeout(showOver, 900);
 }
 
-function attachConn(c) {
-  lastSeen = Date.now();
-  c.on('data', m => { lastSeen = Date.now(); onNet(m); });
-  c.on('close', onDisconnect);
-  c.on('error', onDisconnect);
+// ---------- offline game against a bot in the browser ----------
+
+function startLocal() {
+  const t = newTable({ size, bots: [false, true] });
+  let timer = 0;
+  const pump = () => {
+    clearTimeout(timer);
+    show(viewFor(t.s, 0), { seat: 0, opp: 'Bot', online: false, remaining: 0 });
+    if (t.autoAt) timer = setTimeout(() => { step(t, Date.now()); pump(); }, Math.max(0, t.autoAt - Date.now()));
+  };
+  session = {
+    local: true, connected: true,
+    act(a) {
+      const r = act(t, 0, a, Date.now());
+      if (!r.ok) toast(r.err);
+      pump();
+    },
+    name() {},
+    close() { clearTimeout(timer); },
+  };
+  pump();
 }
 
-// Heartbeat: WebRTC can take a long time to notice a vanished peer.
-setInterval(() => {
-  if (!conn) return;
-  send({ k: 'ping' });
-  if (Date.now() - lastSeen > HEARTBEAT_MS) onDisconnect();
-}, 2000);
-window.addEventListener('pagehide', () => send({ k: 'bye' }));
+// ---------- game on the server ----------
 
-function startHost({ conn: c, peer: p }) {
-  mode = 'host';
-  me = 0;
-  bots = new Set();
-  oppLabel = 'Opponent';
-  conn = c; peer = p;
-  S = newGame({ size });
-  attachConn(c);
-  enterGame();
-  toast('Opponent found!');
-  send({ k: 'welcome', seat: 1, state: S, remaining: remaining() });
-  update();
+function joinGame(path) {
+  let url = wsUrl(path), tries = 0, ws = null, lastPong = 0;
+  const sess = {
+    local: false, connected: false, closed: false,
+    act(a) { send({ k: 'act', a }); },
+    name(n) { send({ k: 'name', name: n }); },
+    close() {
+      sess.closed = true;
+      clearInterval(ping);
+      if (ws) ws.close();
+    },
+  };
+  const send = m => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
+  session = sess;
+
+  // Pings are answered by the server without waking the game up; no answer means the line is dead.
+  const ping = setInterval(() => {
+    if (!sess.connected) return;
+    if (Date.now() - lastPong > 15000) ws.close();
+    else ws.send('ping');
+  }, 5000);
+
+  const connect = () => {
+    const w = new WebSocket(url);
+    ws = w;
+    w.onopen = () => { sess.connected = true; tries = 0; lastPong = Date.now(); if (S) render(); };
+    w.onmessage = e => {
+      if (sess.closed || ws !== w) return;
+      lastPong = Date.now();
+      if (e.data === 'pong') return;
+      const m = JSON.parse(e.data);
+      if (m.k === 'hello') url = wsUrl(`/game?id=${m.game}&token=${m.token}`); // where to reconnect
+      else if (m.k === 'state') show(m.view, m);
+      else if (m.k === 'err' || m.k === 'toast') toast(m.msg, 2500);
+      else if (m.k === 'winner') $('overText').textContent = `${m.name} won this one.`;
+      else if (m.k === 'saved') renderHof(m.hof);
+    };
+    w.onclose = () => {
+      if (sess.closed || ws !== w) return;
+      sess.connected = false;
+      if (!S) { // never got into the game
+        sess.close();
+        serverDown = true;
+        toast('Server unreachable — playing offline', 2500);
+        startLocal();
+        return;
+      }
+      if (S.winner >= 0) return;
+      render();
+      if (tries++ < 6) setTimeout(() => { if (!sess.closed) connect(); }, 1500);
+      else toast('Lost connection to the server', 4000);
+    };
+  };
+  S = null;
+  connect();
 }
-
-function startGuest({ conn: c, peer: p, welcome }) {
-  mode = 'guest';
-  me = welcome.seat;
-  bots = new Set();
-  oppLabel = 'Opponent';
-  conn = c; peer = p;
-  S = welcome.state;
-  attachConn(c);
-  enterGame();
-  toast('Opponent found!');
-  setDeadline(welcome.remaining);
-  update();
-}
-
-function onNet(m) {
-  if (mode === 'host' && m.k === 'act') {
-    const r = applyAction(S, 1 - me, m.a);
-    if (!r.ok) send({ k: 'err', msg: r.err });
-    update();
-  } else if (mode === 'guest' && m.k === 'state') {
-    S = m.state;
-    setDeadline(m.remaining);
-    update();
-  } else if (m.k === 'bye') {
-    onDisconnect();
-  } else if (m.k === 'err') {
-    toast(m.msg);
-  } else if (m.k === 'winner') {
-    $('overText').textContent = `${m.name} won this one.`;
-  }
-}
-
-function onDisconnect() {
-  if (!conn) return;
-  const c = conn;
-  conn = null;
-  try { c.close(); } catch { /* already closed */ }
-  if (!S || S.winner >= 0) return;
-  toast('Opponent left — the bot takes over', 2500);
-  mode = 'bot';
-  bots = new Set([1 - me]);
-  oppLabel = 'Bot';
-  update();
-}
-
-// ---------- game flow ----------
 
 function dispatch(a) {
   tradeGive = a.t === 'trade' ? null : tradeGive;
-  if (mode === 'guest') { send({ k: 'act', a }); return; }
-  const r = applyAction(S, me, a);
-  if (!r.ok) toast(r.err);
-  update();
-}
-
-function remaining() {
-  return deadline ? Math.max(0, deadline - Date.now()) : 0;
-}
-
-function setDeadline(ms) {
-  deadline = ms ? Date.now() + ms : 0;
-}
-
-function stopTimers() {
-  clearTimeout(botTimer); clearTimeout(autoTimer); clearTimeout(turnTimer);
-}
-
-// Called after every state change.
-function update() {
-  stopTimers();
-  if (mode === 'host') {
-    // Online turns are timed so nobody can stall the game.
-    const key = `${S.turn}|${S.phase}|${S.setupStep}|${S.setupNeed}`;
-    if (key !== deadlineKey) {
-      deadlineKey = key;
-      setDeadline(S.winner >= 0 ? 0 : S.phase === 'setup' || S.phase === 'robber' ? SETUP_MS : TURN_MS);
-    }
-    send({ k: 'state', state: S, remaining: remaining() });
-    if (S.winner < 0) {
-      turnTimer = setTimeout(() => {
-        applyAction(S, S.cur, autoAct(S, S.cur));
-        update();
-      }, remaining());
-    }
-  } else if (mode === 'bot') {
-    deadline = 0;
-  }
-
-  render();
-
-  if (S.winner >= 0) { setTimeout(showOver, 900); return; }
-
-  if (bots.has(S.cur) && mode !== 'guest') {
-    const delay = S.phase === 'setup' ? 450 : S.rollId !== update.lastBotRoll ? 1000 : 500;
-    update.lastBotRoll = S.rollId;
-    botTimer = setTimeout(() => {
-      const p = S.cur;
-      let r = applyAction(S, p, botAct(S, p));
-      if (!r.ok) r = applyAction(S, p, autoAct(S, p)); // safety net
-      update();
-    }, delay);
-  } else if (myTurn() && (S.phase === 'main' || S.phase === 'roads') && !hasAnyMove(S, me)) {
-    // Speed rule: nothing you can do -> the turn passes by itself.
-    const key = `${S.turn}`;
-    autoTimer = setTimeout(() => {
-      if (myTurn() && `${S.turn}` === key && !hasAnyMove(S, me)) {
-        toast('Nothing to build — next turn');
-        dispatch({ t: 'end' });
-      }
-    }, 1200);
-  }
+  if (session) session.act(a);
 }
 
 // ---------- rendering ----------
@@ -273,7 +228,7 @@ function renderDice() {
 
 function targets() {
   const t = { verts: [], edges: [], cities: [], hexes: [] };
-  if (!myTurn() || (mode === 'guest' && !conn)) return t;
+  if (!myTurn() || !session || !session.connected) return t;
   const P = S.players[me];
   if (S.phase === 'setup') {
     if (S.setupNeed === 'settlement') t.verts = legalSettles(S, me, true);
@@ -368,10 +323,9 @@ function renderBoard() {
 
 function promptText() {
   if (S.winner >= 0) return `${name(S.winner)} won!`;
-  if (!myTurn()) {
-    if (mode === 'guest' && !conn) return 'Disconnected.';
-    return `${name(S.cur)} ${S.cur === me ? 'are' : 'is'} playing…`;
-  }
+  if (session && !session.connected) return 'Reconnecting…';
+  if (!myTurn()) return `${name(S.cur)} is playing…`;
+  if ((S.phase === 'main' || S.phase === 'roads') && !hasAnyMove(S, me)) return 'Nothing to build — passing…';
   switch (S.phase) {
     case 'setup': return S.setupNeed === 'settlement'
       ? `Place your ${S.setupStep < 2 ? 'first' : 'second'} settlement`
@@ -388,11 +342,11 @@ function renderPanel() {
   const pcard = p => {
     const P = S.players[p];
     const shown = p === me ? vp(S, p) : vp(S, p, false);
-    const devCount = P.devs.length + P.fresh.length + (p === me ? 0 : P.vpCards);
+
     return `<div class="pcard${S.cur === p && S.winner < 0 ? ' turn' : ''}" style="color:${color(p)}">
       <div class="name">${name(p)}</div>
       <div class="vp">${shown}<small> / ${WIN_VP}</small></div>
-      <div class="meta"><span title="Cards in hand">🃏 ${total(P)}</span><span title="Development cards">📜 ${devCount}</span>
+      <div class="meta"><span title="Cards in hand">🃏 ${P.hand}</span><span title="Development cards">📜 ${P.devCount}</span>
       <span title="Knights played">⚔️ ${P.knights}</span><span title="Longest road">🛣️ ${P.roadLen}</span>
       ${S.lr === p ? '<span class="badge">Road</span>' : ''}${S.la === p ? '<span class="badge">Army</span>' : ''}</div>
     </div>`;
@@ -408,12 +362,18 @@ function renderPanel() {
       <span class="ic">${ICON[r]}</span><span class="n">${n}</span>${q < 4 ? `<span class="r">${q}:1</span>` : ''}</button>`;
   }).join('');
 
-  if (tradeGive && canAct && meP.res[tradeGive] >= ratio(S, me, tradeGive)) {
+  if (plenty && canAct && !S.devPlayed && meP.devs.includes('plenty')) {
+    tradeGive = null;
+    $('trade').innerHTML = `🎁 Take 2: ${plenty.map(r => ICON[r]).join('')}` +
+      RES.map(r => `<button data-pick="${r}" title="${r}">${ICON[r]}</button>`).join('') +
+      '<button data-cancel title="Cancel">✕</button>';
+  } else if (tradeGive && canAct && meP.res[tradeGive] >= ratio(S, me, tradeGive)) {
+    plenty = null;
     $('trade').innerHTML = `Give ${ICON[tradeGive].repeat(ratio(S, me, tradeGive))} for:` +
       RES.filter(r => r !== tradeGive).map(r => `<button data-get="${r}" title="${r}">${ICON[r]}</button>`).join('') +
       '<button data-cancel title="Cancel">✕</button>';
   } else {
-    tradeGive = null;
+    tradeGive = plenty = null;
     $('trade').innerHTML = '';
   }
 
@@ -442,11 +402,11 @@ function renderPanel() {
 
 function tickTimer() {
   const el = $('timer');
-  const on = mode !== 'bot' && S && S.winner < 0 && deadline > 0 && $('lobby').hidden;
+  const on = online && S && S.winner < 0 && deadline > 0 && $('lobby').hidden;
   el.classList.toggle('on', !!on);
   if (!on) return;
-  const left = remaining();
-  const full = S.phase === 'setup' || S.phase === 'robber' ? SETUP_MS : TURN_MS;
+  const left = Math.max(0, deadline - Date.now());
+  const full = turnLength(S);
   el.firstElementChild.style.width = `${(100 * left / full).toFixed(1)}%`;
   el.classList.toggle('low', left < 10000);
 }
@@ -454,13 +414,13 @@ function tickTimer() {
 // ---------- game over + hall of fame ----------
 
 function loadHof() {
-  try { return JSON.parse(store.get(HOF_KEY)) || []; } catch { return []; }
+  if (serverDown) { renderHof(null); return; }
+  fetch(SERVER.replace(/\/$/, '') + '/hof').then(r => r.json()).then(renderHof, () => renderHof(null));
 }
 
-function renderHof() {
-  const list = loadHof().sort((a, b) => a.rounds - b.rounds).slice(0, 10);
-  const html = list.length ? `<h3>🏆 Hall of Fame — fastest wins</h3><ol>${list.map(e =>
-    `<li><b>${escapeHtml(e.name)}</b> <span>${e.rounds} rounds · vs ${e.vs} · ${e.size}</span></li>`).join('')}</ol>` : '';
+function renderHof(list) {
+  const html = list && list.length ? `<h3>🏆 Hall of Fame — fastest wins</h3><ol>${list.map(e =>
+    `<li><b>${escapeHtml(e.name)}</b> <span>${e.rounds} rounds · vs ${escapeHtml(e.vs)} · ${escapeHtml(e.size)}</span></li>`).join('')}</ol>` : '';
   document.querySelectorAll('.hof').forEach(el => { el.innerHTML = html; });
 }
 
@@ -471,36 +431,33 @@ function escapeHtml(s) {
 function showOver() {
   if (!S || S.winner < 0 || !$('over').hidden) return;
   const won = S.winner === me;
+  const offline = session && session.local;
   $('overTitle').textContent = won ? '🏆 You won!' : '😵 You lost';
   $('overText').textContent = won
-    ? `${vp(S, me)} points in ${Math.ceil((S.turn + 1) / 2)} rounds. Enter your name for the Hall of Fame:`
-    : `${name(S.winner)} reached ${vp(S, S.winner)} points.${mode === 'bot' ? '' : ' Waiting for their name…'}`;
-  $('nameForm').hidden = !won || savedResult;
+    ? `${vp(S, me)} points in ${Math.ceil((S.turn + 1) / 2)} rounds. ` +
+      (offline ? 'This was an offline game, so it doesn’t count for the Hall of Fame.' : 'Enter your name for the Hall of Fame:')
+    : `${name(S.winner)} reached ${vp(S, S.winner)} points.${online && oppLabel !== 'Bot' ? ' Waiting for their name…' : ''}`;
+  $('nameForm').hidden = !won || offline || savedResult;
   $('nameInput').value = store.get('tinysettler.name') || '';
-  renderHof();
+  loadHof();
   $('over').hidden = false;
-  if (won) $('nameInput').focus();
+  if (won && !offline) $('nameInput').focus();
 }
 
 $('nameForm').addEventListener('submit', e => {
   e.preventDefault();
   const n = $('nameInput').value.trim().slice(0, 20);
-  if (!n || savedResult) return;
+  if (!n || savedResult || !session) return;
   savedResult = true;
   store.set('tinysettler.name', n);
-  const hof = loadHof();
-  hof.push({ name: n, rounds: Math.ceil((S.turn + 1) / 2), vs: oppLabel === 'Bot' ? 'Bot' : 'Human', size: S.size, date: new Date().toISOString() });
-  store.set(HOF_KEY, JSON.stringify(hof.slice(-100)));
-  send({ k: 'winner', name: n });
+  session.name(n); // the server checks that we really won and answers with the new list
   $('nameForm').hidden = true;
   $('overText').textContent = `Well played, ${n}!`;
-  renderHof();
 });
 
 $('againBtn').addEventListener('click', () => {
-  stopTimers();
-  if (peer) { try { peer.destroy(); } catch { /* ignore */ } }
-  conn = peer = null;
+  if (session) session.close();
+  session = null;
   S = null;
   $('game').hidden = true;
   showLobby();
@@ -522,11 +479,17 @@ $('panel').addEventListener('click', e => {
   const b = e.target.closest('button');
   if (!b || b.disabled || !S) return;
   const d = b.dataset;
-  if (d.give) { tradeGive = tradeGive === d.give ? null : d.give; renderPanel(); }
+  if (d.give) { tradeGive = tradeGive === d.give ? null : d.give; plenty = null; renderPanel(); }
   else if (d.get) dispatch({ t: 'trade', give: tradeGive, get: d.get });
-  else if (d.cancel !== undefined) { tradeGive = null; renderPanel(); }
+  else if (d.cancel !== undefined) { tradeGive = plenty = null; renderPanel(); }
   else if (d.buy !== undefined) dispatch({ t: 'buydev' });
+  else if (d.play === 'plenty') { plenty = []; tradeGive = null; renderPanel(); }
   else if (d.play) dispatch({ t: 'play', card: d.play });
+  else if (d.pick) {
+    plenty.push(d.pick);
+    if (plenty.length < 2) renderPanel();
+    else { const res = plenty; plenty = null; dispatch({ t: 'play', card: 'plenty', res }); }
+  }
   else if (b.id === 'endBtn') dispatch({ t: 'end' });
 });
 
@@ -542,6 +505,6 @@ $('botNow').addEventListener('click', startBot);
 setInterval(tickTimer, 250);
 
 // Debug hook for testing in the console.
-window.tinysettler = { get state() { return S; }, get seat() { return me; }, get mode() { return mode; } };
+window.tinysettler = { get state() { return S; }, get seat() { return me; }, get session() { return session; } };
 
 showLobby();

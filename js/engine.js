@@ -224,7 +224,7 @@ export function hasAnyMove(s, p) {
   return RES.some(r => P.res[r] >= ratio(s, p, r));
 }
 
-// The resources a player most wants next (used for Year of Plenty and by the bot).
+// The resources a player most wants next (used by the bot, e.g. for Year of Plenty).
 export function wantedResources(s, p) {
   const P = s.players[p];
   const goal = upgradable(s, p).length && P.left.city ? COST.city : COST.settlement;
@@ -399,6 +399,10 @@ export function applyAction(s, p, a) {
       if (s.phase !== 'main') return fail('Not now');
       if (s.devPlayed) return fail('Only one development card per turn');
       if (i < 0 || a.card === 'vp') return fail('You do not have that card');
+      const pick = a.res;
+      if (a.card === 'plenty' && !(Array.isArray(pick) && pick.length === 2 && pick.every(r => RES.includes(r)))) {
+        return fail('Pick two resources');
+      }
       P.devs.splice(i, 1);
       s.devPlayed = true;
       log(s, `@${p} played ${DEV_NAMES[a.card]}`);
@@ -410,9 +414,8 @@ export function applyAction(s, p, a) {
         s.freeRoads = 2;
         if (P.left.road && legalRoads(s, p, false).length) s.phase = 'roads';
       } else if (a.card === 'plenty') {
-        const want = wantedResources(s, p).slice(0, 2);
         const g = {};
-        want.forEach(r => { P.res[r]++; g[r] = (g[r] || 0) + 1; });
+        pick.forEach(r => { P.res[r]++; g[r] = (g[r] || 0) + 1; });
         log(s, `@${p} took ${fmt(g)}`);
       }
       break;

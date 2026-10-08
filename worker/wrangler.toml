@@ -1,0 +1,20 @@
+name = "tinysettler"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "Lobby"
+
+[[durable_objects.bindings]]
+name = "GAME"
+class_name = "Game"
+
+[[durable_objects.bindings]]
+name = "HOF"
+class_name = "HallOfFame"
+
+# SQLite-backed Durable Objects are included in the Workers free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Lobby", "Game", "HallOfFame"]

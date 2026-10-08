@@ -118,6 +118,7 @@ button.primary:not(:disabled):hover { filter: brightness(1.05); }
 .sizes button.sel { background: var(--ink); color: #fff; border-color: var(--ink); }
 #mmStatus { margin: 0; color: var(--muted); font-size: 14px; min-height: 20px; }
 .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -1px; }
+#mmStatus.off .spinner { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 #nameForm { display: flex; gap: 8px; }
 #nameForm input { flex: 1; font: inherit; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); }

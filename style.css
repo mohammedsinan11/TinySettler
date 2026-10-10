@@ -28,14 +28,15 @@ button.primary:disabled { background: var(--off); }
 button.primary:not(:disabled):hover { filter: brightness(1.05); }
 
 #game { display: grid; grid-template-columns: 1fr 360px; gap: 14px; height: 100vh; padding: 12px; }
-#boardWrap { position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; }
-#board { width: 100%; height: 100%; max-height: calc(100vh - 24px); overflow: visible; }
+/* The dice and help button sit in a strip above the board so they never cover it. */
+#boardWrap { position: relative; min-height: 0; display: flex; align-items: center; justify-content: center; padding-top: 72px; }
+#board { width: 100%; height: 100%; max-height: calc(100vh - 96px); overflow: visible; }
 #panel { background: var(--paper); border-radius: 22px; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; border: 3px solid var(--line); box-shadow: 6px 6px 0 #1b1b1b; }
 #panel section h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; }
 
 @media (max-width: 800px) {
   #game { grid-template-columns: 1fr; height: auto; padding: 8px; }
-  #board { max-height: 56vh; }
+  #board { max-height: 52vh; }
   #panel { overflow: visible; }
 }
 

@@ -25,7 +25,7 @@ export function refresh(t, now) {
   else if (key !== t.dkey) { t.dkey = key; t.deadline = now + turnLength(s); }
 
   if (s.winner >= 0) t.autoAt = 0;
-  else if (t.bots[s.cur]) t.autoAt = now + (s.phase === 'setup' ? 450 : s.rollId !== t.botRoll ? 1000 : 500);
+  else if (t.bots[s.cur]) t.autoAt = now + (s.phase === 'setup' ? 800 : s.rollId !== t.botRoll ? 1000 : 500);
   else if ((s.phase === 'main' || s.phase === 'roads') && !hasAnyMove(s, s.cur)) t.autoAt = now + PASS_MS;
   else t.autoAt = t.deadline;
 }

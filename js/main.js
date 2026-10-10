@@ -405,7 +405,7 @@ function renderBoard() {
       : `M${x - 10} ${y + 9} V${y - 2} L${x} ${y - 12} L${x + 10} ${y - 2} V${y + 9} Z`;
     const roof = city ? `M${x - 15} ${y - 3} L${x - 8} ${y - 11} L${x - 8} ${y + 11} H${x - 15} Z` : `M${x - 10} ${y - 2} L${x} ${y - 12} L${x} ${y + 9} H${x - 10} Z`;
     const door = city ? `<rect x="${x + 4}" y="${y + 3}" width="5" height="8" fill="#1f1a17" opacity=".55"/>` : `<rect x="${x - 2.5}" y="${y + 2}" width="5" height="7" fill="#1f1a17" opacity=".55"/>`;
-    out.push(`<g class="bldg${pop ? ' pop' : ''}"${pop ? ` style="${pop};transform-origin:${x}px ${y}px"` : ''} filter="url(#shadow)">` +
+    out.push(`<g class="bldg${pop ? ' pop' : ''}"${pop ? ` style="${pop}"` : ''} filter="url(#shadow)">` +
       `<path d="${body}" fill="${color(o)}" stroke="#1f1a17" stroke-width="2.2" stroke-linejoin="round"/>` +
       `<path d="${roof}" fill="#fff" opacity=".22" pointer-events="none"/>${door}</g>`);
     if (pop && o !== me) out.push(`<circle class="ping" cx="${x}" cy="${y}" r="14" style="${pop}" stroke="${color(o)}"/>`);

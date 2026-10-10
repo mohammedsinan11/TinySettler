@@ -8,7 +8,6 @@ const $ = id => document.getElementById(id);
 const R = 60;                      // hex radius in SVG units
 const SEARCH_MS = 9000;            // how long to look for a human before falling back to the bot
 const COLORS = { me: '#2f7de1', opp: '#e0533d' };
-const DIE = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 
 // The game runs on the server, which sends us only what our seat may see.
 // Without a server (or if it can't be reached) a bot game runs in the browser.
@@ -219,12 +218,12 @@ const DEV_INFO = {
 // effect remembers when it started and resumes with a negative animation delay.
 const fx = new Map();
 let seen = null, prevRes = null, gains = {};
-function fxStart(key) { fx.set(key, performance.now()); }
+function fxStart(key, after = 0) { fx.set(key, performance.now() + after); }
 function fxStyle(key, ms) {
   const t = fx.get(key);
   if (t === undefined) return null;
   const age = performance.now() - t;
-  return age < ms ? `animation-delay:-${age | 0}ms` : null;
+  return age < ms ? `animation-delay:${Math.round(-age)}ms` : null;
 }
 function resetFx() { fx.clear(); seen = null; prevRes = null; gains = {}; }
 
@@ -236,9 +235,11 @@ function trackChanges() {
   S.eOwn.forEach((o, e) => { if (o >= 0) keys.add(`e${e}`); });
   if (seen) for (const k of keys) if (!seen.has(k)) fxStart(k);
   seen = keys;
-  if (!first && S.rollId !== lastRoll) fxStart('roll');
+  // Tiles light up and cards arrive once the dice have landed.
+  const rolled = !first && S.rollId !== lastRoll;
+  if (rolled) fxStart('roll', ROLL_MS);
   const res = S.players[me].res;
-  if (!first) RES.forEach(r => { if (res[r] > prevRes[r]) { gains[r] = res[r] - prevRes[r]; fxStart(`gain-${r}`); } });
+  if (!first) RES.forEach(r => { if (res[r] > prevRes[r]) { gains[r] = res[r] - prevRes[r]; fxStart(`gain-${r}`, rolled ? ROLL_MS : 0); } });
   prevRes = { ...res };
 }
 
@@ -249,19 +250,41 @@ function render() {
   renderDice();
 }
 
+const ROLL_MS = 650;
+const PIPS = { 1: [5], 2: [1, 9], 3: [1, 5, 9], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
+const dieHtml = n => `<span class="die">${PIPS[n].map(i => `<i style="grid-area:p${i}"></i>`).join('')}</span>`;
+let diceTimer = 0;
+
+function paintDice(faces, rolling) {
+  $('dice').innerHTML = `<div class="dice">${dieHtml(faces[0])}${dieHtml(faces[1])}</div>` +
+    `<div class="dsum"><b>${rolling ? '…' : faces[0] + faces[1]}</b><small>${S.cur === me ? 'You' : name(S.cur)} rolled</small></div>`;
+}
+
 function renderDice() {
   const d = $('dice');
   if (!S.dice) { d.classList.remove('on'); return; }
-  d.innerHTML = `<span class="die">${DIE[S.dice[0]]}</span><span class="die">${DIE[S.dice[1]]}</span><b>${S.dice[0] + S.dice[1]}</b>` +
-    `<small>${S.cur === me ? 'You' : name(S.cur)} rolled</small>`;
   d.classList.add('on');
   d.style.setProperty('--who', color(S.cur));
   if (S.rollId !== lastRoll) {
+    // Tumble through random faces, then land on the real roll.
     lastRoll = S.rollId;
-    d.classList.remove('roll');
-    void d.offsetWidth;
-    d.classList.add('roll');
-  }
+    clearInterval(diceTimer);
+    const until = performance.now() + ROLL_MS;
+    d.classList.remove('land');
+    d.classList.add('rolling');
+    const tick = () => {
+      if (!S || !S.dice) { clearInterval(diceTimer); diceTimer = 0; return; }
+      if (performance.now() < until) { paintDice([1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)], true); return; }
+      clearInterval(diceTimer);
+      diceTimer = 0;
+      d.classList.remove('rolling');
+      void d.offsetWidth;
+      d.classList.add('land');
+      paintDice(S.dice, false);
+    };
+    tick();
+    diceTimer = setInterval(tick, 75);
+  } else if (!diceTimer) paintDice(S.dice, false);
 }
 
 function targets() {
@@ -286,19 +309,17 @@ function targets() {
 
 // Tile textures, lighting and shadows.
 const DEFS = `<defs>
-  <pattern id="tx-wood" width="26" height="24" patternUnits="userSpaceOnUse"><rect width="26" height="24" fill="#3b7a34"/>
-    <path d="M6 18 L11 6 L16 18Z M17 22 L21 12 L25 22Z" fill="#2a5c25"/><path d="M11 6 L13.5 12 L11 11Z" fill="#5a9a48"/></pattern>
-  <pattern id="tx-brick" width="24" height="14" patternUnits="userSpaceOnUse"><rect width="24" height="14" fill="#c4612c"/>
-    <path d="M0 0.5H24M0 7.5H24M6 0V7M18 7V14" stroke="#9b4720" stroke-width="1.6"/></pattern>
-  <pattern id="tx-sheep" width="22" height="22" patternUnits="userSpaceOnUse"><rect width="22" height="22" fill="#95c447"/>
-    <path d="M3 8q2-4 4 0M13 18q2-4 4 0M15 5q1.5-3 3 0" stroke="#79a836" stroke-width="1.6" fill="none"/></pattern>
-  <pattern id="tx-wheat" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="12" height="12" fill="#e6c044"/>
-    <path d="M0 3H12M0 9H12" stroke="#d1a72f" stroke-width="2"/></pattern>
-  <pattern id="tx-ore" width="34" height="26" patternUnits="userSpaceOnUse"><rect width="34" height="26" fill="#8d939b"/>
-    <path d="M0 26 L11 8 L19 19 L25 11 L34 26Z" fill="#727880"/><path d="M11 8 L14 13 L11 12 L8 13Z" fill="#e8ecef"/></pattern>
-  <radialGradient id="light" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#fff" stop-opacity=".28"/>
-    <stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".22"/></radialGradient>
-  <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="2.5" stdDeviation="2" flood-opacity=".45"/></filter>
+  <pattern id="tx-wood" width="26" height="24" patternUnits="userSpaceOnUse"><rect width="26" height="24" fill="#3fae49"/>
+    <path d="M6 18 L11 6 L16 18Z M17 22 L21 12 L25 22Z" fill="#23802e"/></pattern>
+  <pattern id="tx-brick" width="24" height="14" patternUnits="userSpaceOnUse"><rect width="24" height="14" fill="#f06a35"/>
+    <path d="M0 0.5H24M0 7.5H24M6 0V7M18 7V14" stroke="#b8441a" stroke-width="1.8"/></pattern>
+  <pattern id="tx-sheep" width="22" height="22" patternUnits="userSpaceOnUse"><rect width="22" height="22" fill="#b6e35a"/>
+    <path d="M3 8q2-4 4 0M13 18q2-4 4 0M15 5q1.5-3 3 0" stroke="#86b832" stroke-width="1.8" fill="none"/></pattern>
+  <pattern id="tx-wheat" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="12" height="12" fill="#ffd23f"/>
+    <path d="M0 3H12M0 9H12" stroke="#e9b318" stroke-width="2"/></pattern>
+  <pattern id="tx-ore" width="34" height="26" patternUnits="userSpaceOnUse"><rect width="34" height="26" fill="#a8b0bc"/>
+    <path d="M0 26 L11 8 L19 19 L25 11 L34 26Z" fill="#7d8592"/><path d="M11 8 L14 13 L11 12 L8 13Z" fill="#fff"/></pattern>
+  <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="2" dy="2.5" stdDeviation="0" flood-color="#1b1b1b" flood-opacity=".9"/></filter>
 </defs>`;
 
 function renderBoard() {
@@ -311,6 +332,8 @@ function renderBoard() {
   const X = v => S.verts[v].x * R, Y = v => S.verts[v].y * R;
   const ring = (h, k) => h.v.map(v => `${(h.x * R + (X(v) - h.x * R) * k).toFixed(1)},${(h.y * R + (Y(v) - h.y * R) * k).toFixed(1)}`).join(' ');
   const out = [DEFS];
+  const picking = t.verts.length + t.edges.length + t.cities.length + t.hexes.length > 0;
+  svg.classList.toggle('picking', picking);
   const sum = S.dice ? S.dice[0] + S.dice[1] : 0;
   const rollFx = fxStyle('roll', 2400);
 
@@ -339,9 +362,10 @@ function renderBoard() {
     const target = t.hexes.includes(i);
     const pts = ring(h, 0.97);
     out.push(`<g class="tile${target ? ' target' : ''}"${target ? ` data-h="${i}"` : ''}><title>${RES_NAME[h.res]} — produces on a roll of ${h.num}</title>` +
-      `<polygon class="hex" points="${pts}" fill="url(#tx-${h.res})"/><polygon points="${pts}" fill="url(#light)" pointer-events="none"/>`);
+      `<polygon class="hex" points="${pts}" fill="url(#tx-${h.res})"/>`);
     if (rollFx && h.num === sum && i !== S.robber) out.push(`<polygon class="prod" points="${pts}" style="${rollFx}"/>`);
     if (i === S.robber) out.push(`<polygon points="${pts}" fill="rgba(20,20,30,.38)" pointer-events="none"/>`);
+    else if (picking && !target) out.push(`<polygon class="dim" points="${pts}"/>`);
     out.push(`<text class="tileIcon" x="${cx}" y="${cy - R * 0.48}">${ICON[h.res]}</text>`);
     const hot = h.num === 6 || h.num === 8;
     const dots = 6 - Math.abs(7 - h.num);
@@ -363,11 +387,12 @@ function renderBoard() {
       `<line ${c} stroke="#fff" stroke-opacity=".35" stroke-width="2.5" stroke-linecap="round" transform="translate(0,-1.5)"/></g>`);
   });
 
-  // road targets
+  // road targets: a see-through road in your colour
   t.edges.forEach(i => {
-    const e = S.edges[i], k = 0.22;
+    const e = S.edges[i], k = 0.15;
     const c = `x1="${X(e.a) + (X(e.b) - X(e.a)) * k}" y1="${Y(e.a) + (Y(e.b) - Y(e.a)) * k}" x2="${X(e.b) + (X(e.a) - X(e.b)) * k}" y2="${Y(e.b) + (Y(e.a) - Y(e.b)) * k}"`;
-    out.push(`<g class="etarget" data-e="${i}"><title>Build a road here</title><line class="ehit" ${c}/><line class="espot" ${c}/></g>`);
+    out.push(`<g class="etarget" data-e="${i}"><title>Build a road here</title><line class="ehit" ${c}/>` +
+      `<line class="eglow" ${c}/><line class="espot" ${c} stroke="${COLORS.me}"/></g>`);
   });
 
   // buildings
@@ -395,8 +420,10 @@ function renderBoard() {
   }
 
   // build spots
-  t.verts.forEach(v => out.push(`<g class="vtarget" data-v="${v}"><title>Build a settlement here</title><circle class="spot" cx="${X(v)}" cy="${Y(v)}" r="11"/></g>`));
-  t.cities.forEach(v => out.push(`<g class="vtarget" data-c="${v}"><title>Upgrade to a city</title><circle class="spot city" cx="${X(v)}" cy="${Y(v)}" r="17"/></g>`));
+  t.verts.forEach(v => out.push(`<g class="vtarget" data-v="${v}"><title>Build a settlement here</title><circle class="vhit" cx="${X(v)}" cy="${Y(v)}" r="18"/>` +
+    `<g class="spot"><circle cx="${X(v)}" cy="${Y(v)}" r="12"/><path d="M${X(v) - 5} ${Y(v)}H${X(v) + 5}M${X(v)} ${Y(v) - 5}V${Y(v) + 5}"/></g></g>`));
+  t.cities.forEach(v => out.push(`<g class="vtarget" data-c="${v}"><title>Upgrade to a city</title><circle class="vhit" cx="${X(v)}" cy="${Y(v)}" r="20"/>` +
+    `<g class="spot city"><circle cx="${X(v)}" cy="${Y(v)}" r="19"/><text x="${X(v) + 14}" y="${Y(v) - 14}">⬆</text></g></g>`));
 
   svg.innerHTML = out.join('');
 }
@@ -439,11 +466,11 @@ function buildCards(canAct) {
     if (!left) status = k === 'dev' ? 'Deck is empty' : 'None left';
     else if (Object.keys(missing).length) status = `Need ${costStr(missing)}`;
     else if (!spots()) status = k === 'settlement' ? 'Build a road to a free corner first' : k === 'city' ? 'Build a settlement first' : 'No free spot';
-    else { ok = true; status = k === 'dev' ? 'Tap to buy' : 'Tap a glowing spot'; }
+    else { ok = true; status = k === 'dev' ? '👆 Tap to buy' : '👆 Tap here or a glowing spot'; }
     const active = canAct && ok;
     return `<button class="bcard${active ? ' ok' : ''}${buildMode === k ? ' sel' : ''}" data-build="${k}" ${active ? '' : 'aria-disabled="true"'}>` +
       `<span class="bname">${label}</span><span class="bwhat">${what}</span><span class="bcost">${icons}</span>` +
-      `<span class="bstat">${canAct || !left ? status : `${left} left`}</span></button>`;
+      `<span class="bstat${canAct && !ok ? ' no' : ''}">${canAct || !left ? status : `${left} left`}</span></button>`;
   }).join('');
 }
 
@@ -518,7 +545,10 @@ function renderPanel() {
   $('devSec').hidden = !devBtns.length;
   $('devs').innerHTML = devBtns.join('') + (devBtns.length && S.devPlayed && canAct ? '<p class="note">One development card per turn.</p>' : '');
 
-  $('endBtn').disabled = !(myTurn() && (S.phase === 'main' || S.phase === 'roads') && session && session.connected);
+  const canEnd = myTurn() && (S.phase === 'main' || S.phase === 'roads') && session && session.connected;
+  $('endBtn').disabled = !canEnd;
+  $('endBtn').textContent = canEnd ? 'End turn' : S.winner >= 0 ? 'Game over' : myTurn() ? 'Finish the step above first' : `Waiting for ${name(S.cur)}…`;
+  $('panel').classList.toggle('waiting', !myTurn());
 
   $('log').innerHTML = S.log.slice(-12).reverse()
     .map(l => `<li>${l.replace(/@(\d)/g, (_, p) => `<b style="color:${color(+p)}">${name(+p)}</b>`)}</li>`).join('');

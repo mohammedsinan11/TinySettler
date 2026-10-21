@@ -307,7 +307,8 @@ function targets() {
   return t;
 }
 
-// Tile textures, lighting and shadows.
+// Tile textures. They live in their own hidden <svg> that is created once, so
+// the board can be redrawn without re-creating what its tiles refer to.
 const DEFS = `<defs>
   <pattern id="tx-wood" width="26" height="24" patternUnits="userSpaceOnUse"><rect width="26" height="24" fill="#3fae49"/>
     <path d="M6 18 L11 6 L16 18Z M17 22 L21 12 L25 22Z" fill="#23802e"/></pattern>
@@ -319,8 +320,10 @@ const DEFS = `<defs>
     <path d="M0 3H12M0 9H12" stroke="#e9b318" stroke-width="2"/></pattern>
   <pattern id="tx-ore" width="34" height="26" patternUnits="userSpaceOnUse"><rect width="34" height="26" fill="#a8b0bc"/>
     <path d="M0 26 L11 8 L19 19 L25 11 L34 26Z" fill="#7d8592"/><path d="M11 8 L14 13 L11 12 L8 13Z" fill="#fff"/></pattern>
-  <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="2" dy="2.5" stdDeviation="0" flood-color="#1b1b1b" flood-opacity=".9"/></filter>
 </defs>`;
+document.body.insertAdjacentHTML('beforeend', `<svg width="0" height="0" style="position:absolute" aria-hidden="true">${DEFS}</svg>`);
+// Cartoon shadow: a dark copy of a shape, nudged down and right.
+const SHADOW = 'fill="#1b1b1b" stroke="#1b1b1b" transform="translate(2 2.5)"';
 
 function renderBoard() {
   const svg = $('board');
@@ -331,7 +334,7 @@ function renderBoard() {
   const t = targets();
   const X = v => S.verts[v].x * R, Y = v => S.verts[v].y * R;
   const ring = (h, k) => h.v.map(v => `${(h.x * R + (X(v) - h.x * R) * k).toFixed(1)},${(h.y * R + (Y(v) - h.y * R) * k).toFixed(1)}`).join(' ');
-  const out = [DEFS];
+  const out = [];
   const picking = t.verts.length + t.edges.length + t.cities.length + t.hexes.length > 0;
   svg.classList.toggle('picking', picking);
   const sum = S.dice ? S.dice[0] + S.dice[1] : 0;
@@ -351,7 +354,7 @@ function renderBoard() {
     const label = e.port === 'any' ? '3:1' : `2:1`;
     out.push(`<g class="port"><title>Harbour: trade ${e.port === 'any' ? '3 of a kind' : `2 ${RES_NAME[e.port]}`} for 1</title>` +
       `<line x1="${px}" y1="${py}" x2="${a.x * R}" y2="${a.y * R}"/><line x1="${px}" y1="${py}" x2="${b.x * R}" y2="${b.y * R}"/>` +
-      `<circle cx="${px}" cy="${py}" r="19" filter="url(#shadow)"/>` +
+      `<circle cx="${px}" cy="${py}" r="19" ${SHADOW}/><circle cx="${px}" cy="${py}" r="19"/>` +
       (e.port === 'any' ? `<text x="${px}" y="${py}">${label}</text>`
         : `<text x="${px}" y="${py - 6}" class="pi">${ICON[e.port]}</text><text x="${px}" y="${py + 9}" class="ps">${label}</text>`) + '</g>');
   });
@@ -369,7 +372,7 @@ function renderBoard() {
     out.push(`<text class="tileIcon" x="${cx}" y="${cy - R * 0.48}">${ICON[h.res]}</text>`);
     const hot = h.num === 6 || h.num === 8;
     const dots = 6 - Math.abs(7 - h.num);
-    out.push(`<g pointer-events="none"><circle class="token" cx="${cx}" cy="${cy + 4}" r="18" filter="url(#shadow)"/>` +
+    out.push(`<g pointer-events="none"><circle cx="${cx}" cy="${cy + 4}" r="18" ${SHADOW}/><circle class="token" cx="${cx}" cy="${cy + 4}" r="18"/>` +
       `<text class="num${hot ? ' hot' : ''}" x="${cx}" y="${cy + 1}">${h.num}</text>`);
     for (let d = 0; d < dots; d++) out.push(`<circle cx="${cx + (d - (dots - 1) / 2) * 4.6}" cy="${cy + 14}" r="1.7" fill="${hot ? '#c62828' : '#3a2f27'}"/>`);
     out.push('</g></g>');
@@ -382,9 +385,10 @@ function renderBoard() {
     const k = 0.15, a = e.a, b = e.b;
     const c = `x1="${X(a) + (X(b) - X(a)) * k}" y1="${Y(a) + (Y(b) - Y(a)) * k}" x2="${X(b) + (X(a) - X(b)) * k}" y2="${Y(b) + (Y(a) - Y(b)) * k}"`;
     const pop = fxStyle(`e${i}`, 700);
-    out.push(`<g class="road${pop ? ' pop' : ''}"${pop ? ` style="${pop}"` : ''} filter="url(#shadow)">` +
-      `<line ${c} stroke="#1f1a17" stroke-width="12" stroke-linecap="round"/><line ${c} stroke="${color(o)}" stroke-width="8" stroke-linecap="round"/>` +
+    out.push(`<g class="road${pop ? ' pop' : ''}"${pop ? ` style="${pop}"` : ''}>` +
+      `<line ${c} stroke-width="12" stroke-linecap="round" ${SHADOW}/><line ${c} stroke="#1f1a17" stroke-width="12" stroke-linecap="round"/><line ${c} stroke="${color(o)}" stroke-width="8" stroke-linecap="round"/>` +
       `<line ${c} stroke="#fff" stroke-opacity=".35" stroke-width="2.5" stroke-linecap="round" transform="translate(0,-1.5)"/></g>`);
+    if (pop) out.push(`<line class="flash" ${c} style="${pop}" stroke="${color(o)}"/>`);
   });
 
   // road targets: a see-through road in your colour
@@ -405,18 +409,24 @@ function renderBoard() {
       : `M${x - 10} ${y + 9} V${y - 2} L${x} ${y - 12} L${x + 10} ${y - 2} V${y + 9} Z`;
     const roof = city ? `M${x - 15} ${y - 3} L${x - 8} ${y - 11} L${x - 8} ${y + 11} H${x - 15} Z` : `M${x - 10} ${y - 2} L${x} ${y - 12} L${x} ${y + 9} H${x - 10} Z`;
     const door = city ? `<rect x="${x + 4}" y="${y + 3}" width="5" height="8" fill="#1f1a17" opacity=".55"/>` : `<rect x="${x - 2.5}" y="${y + 2}" width="5" height="7" fill="#1f1a17" opacity=".55"/>`;
-    out.push(`<g class="bldg${pop ? ' pop' : ''}"${pop ? ` style="${pop}"` : ''} filter="url(#shadow)">` +
-      `<path d="${body}" fill="${color(o)}" stroke="#1f1a17" stroke-width="2.2" stroke-linejoin="round"/>` +
+    out.push(`<g class="bldg${pop ? ' pop' : ''}"${pop ? ` style="${pop}"` : ''}>` +
+      `<path d="${body}" stroke-width="2.2" stroke-linejoin="round" ${SHADOW}/><path d="${body}" fill="${color(o)}" stroke="#1f1a17" stroke-width="2.2" stroke-linejoin="round"/>` +
       `<path d="${roof}" fill="#fff" opacity=".22" pointer-events="none"/>${door}</g>`);
-    if (pop && o !== me) out.push(`<circle class="ping" cx="${x}" cy="${y}" r="14" style="${pop}" stroke="${color(o)}"/>`);
+    if (pop) out.push(`<circle class="ping" cx="${x}" cy="${y}" r="22" style="${pop}" stroke="${color(o)}"/>`);
   });
 
   // robber
   if (S.robber >= 0) {
     const h = S.hexes[S.robber], cx = h.x * R + 25, cy = h.y * R - 2;
-    out.push(`<g pointer-events="none" filter="url(#shadow)"><title>Robber: this tile produces nothing</title>` +
+    const robber = `M${cx - 9} ${cy + 16} Q${cx - 10} ${cy + 2} ${cx - 4} ${cy - 2} A7 7 0 1 1 ${cx + 4} ${cy - 2} Q${cx + 10} ${cy + 2} ${cx + 9} ${cy + 16} Z`;
+    out.push(`<g pointer-events="none"><title>Robber: this tile produces nothing</title><path d="${robber}" ${SHADOW}/>` +
       `<path d="M${cx - 9} ${cy + 16} Q${cx - 10} ${cy + 2} ${cx - 4} ${cy - 2} A7 7 0 1 1 ${cx + 4} ${cy - 2} Q${cx + 10} ${cy + 2} ${cx + 9} ${cy + 16} Z" fill="#2d2d33" stroke="#0e0e10" stroke-width="1.5"/>` +
       `<ellipse cx="${cx - 2}" cy="${cy - 9}" rx="2.2" ry="1.6" fill="#fff" opacity=".35"/></g>`);
+  }
+
+  // during setup, ring the settlement the road has to touch
+  if (S.phase === 'setup' && S.setupNeed === 'road' && S.lastSettle >= 0) {
+    out.push(`<circle class="here" cx="${X(S.lastSettle)}" cy="${Y(S.lastSettle)}" r="20" stroke="${color(S.cur)}"/>`);
   }
 
   // build spots
@@ -440,7 +450,7 @@ function banner() {
     case 'setup': return S.setupNeed === 'settlement'
       ? [`Place your ${S.setupStep < 2 ? 'first' : 'second'} settlement`, 'Tap a white circle. Settlements collect resources from the tiles they touch. Numbers with more dots are rolled more often.' +
         (S.setupStep >= 2 ? ' This one gives you its starting resources right away.' : '')]
-      : ['Place a road next to it', 'Tap a glowing line. Roads let you reach new corners to build on.'];
+      : ['Place a road at your new settlement', 'It’s the one with the ring. Tap one of the see-through roads touching it.'];
     case 'robber': return ['🥷 Move the robber', 'Tap a tile to block it. If your opponent has a building there, you steal one of their cards.'];
     case 'roads': return [`Place ${S.freeRoads} free road${S.freeRoads > 1 ? 's' : ''}`, 'Tap a glowing line.'];
     default:

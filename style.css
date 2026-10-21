@@ -146,25 +146,30 @@ button.dev small { font-size: 11px; color: var(--muted); }
 
 /* build targets: things you can tap pulse, the rest of the board is dimmed */
 .vtarget, .etarget { cursor: pointer; }
-.vhit { fill: transparent; }
-.spot { transform-box: fill-box; transform-origin: center; animation: bob .8s ease-in-out infinite alternate; pointer-events: none; }
-.spot circle { fill: #fff; stroke: var(--me); stroke-width: 4.5; }
+.vhit { fill: transparent; pointer-events: all; }
+.spot { pointer-events: none; }
+.spot circle { fill: #fff; stroke: var(--me); stroke-width: 4.5; animation: ring .8s ease-in-out infinite alternate; }
 .spot path { stroke: var(--me); stroke-width: 3.5; stroke-linecap: round; }
 .spot.city circle { fill: rgba(255,201,40,.35); stroke: #1b1b1b; stroke-width: 3; stroke-dasharray: 6 4; }
 .spot.city text { font-size: 15px; text-anchor: middle; dominant-baseline: central; }
 .vtarget:hover .spot circle { fill: var(--accent); }
-.ehit { stroke: transparent; stroke-width: 24; }
+.ehit { stroke: transparent; stroke-width: 24; pointer-events: stroke; }
 .eglow { stroke: #fff; stroke-width: 15; stroke-linecap: round; pointer-events: none; }
 .espot { stroke-width: 9; stroke-linecap: round; pointer-events: none; animation: ghost .8s ease-in-out infinite alternate; }
 .etarget:hover .espot { animation: none; opacity: 1; }
 .etarget:hover .eglow { stroke: var(--accent); }
-@keyframes bob { from { transform: scale(.85); } to { transform: scale(1.12); } }
+@keyframes ring { from { stroke-width: 3; } to { stroke-width: 7; } }
+.here { fill: none; stroke-width: 4; stroke-dasharray: 6 5; pointer-events: none; animation: march 1s linear infinite; }
 @keyframes ghost { from { opacity: .35; } to { opacity: .9; } }
 
-.pop { animation: pop .7s cubic-bezier(.3,1.6,.5,1) both; transform-box: fill-box; transform-origin: center; }
-.ping { fill: none; stroke-width: 3.5; animation: ping .7s ease-out forwards; pointer-events: none; transform-box: fill-box; transform-origin: center; }
-@keyframes pop { 0% { transform: scale(.2); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; } }
-@keyframes ping { 0% { transform: scale(.6); opacity: 1; } 100% { transform: scale(2.4); opacity: 0; } }
+/* New pieces fade in with a flash. Only opacity and stroke width are animated,
+   which every browser handles reliably for SVG. */
+.pop { animation: pop .35s ease-out both; }
+.ping { fill: none; pointer-events: none; animation: ping .7s ease-out both; }
+.flash { stroke-width: 20; stroke-linecap: round; pointer-events: none; animation: flash .7s ease-out both; }
+@keyframes pop { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ping { from { opacity: 1; stroke-width: 10; } to { opacity: 0; stroke-width: 0; } }
+@keyframes flash { from { opacity: .7; } to { opacity: 0; } }
 
 /* dice */
 #dice { position: absolute; top: 8px; left: 8px; background: var(--paper); border: 2.5px solid var(--line); border-radius: 16px; padding: 8px 12px; display: none; align-items: center; gap: 10px; }

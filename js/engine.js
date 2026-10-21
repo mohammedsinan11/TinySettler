@@ -314,6 +314,7 @@ export function applyAction(s, p, a) {
         P.left.settlement--;
         s.lastSettle = v;
         s.setupNeed = 'road';
+        log(s, `@${p} placed a settlement`);
         if (s.setupStep >= 2) {
           const g = {};
           for (const h of s.verts[v].hexes) { P.res[s.hexes[h].res]++; g[s.hexes[h].res] = (g[s.hexes[h].res] || 0) + 1; }
@@ -338,6 +339,7 @@ export function applyAction(s, p, a) {
         if (s.setupNeed !== 'road' || !canRoad(s, p, e, true)) return fail('Road must touch your new settlement');
         s.eOwn[e] = p;
         P.left.road--;
+        log(s, `@${p} placed a road`);
         s.setupStep++;
         if (s.setupStep >= 4) {
           s.phase = 'main';
@@ -357,6 +359,7 @@ export function applyAction(s, p, a) {
         s.eOwn[e] = p;
         P.left.road--;
         s.freeRoads--;
+        log(s, `@${p} built a free road`);
         if (s.freeRoads <= 0 || !P.left.road || !legalRoads(s, p, false).length) s.phase = 'main';
       } else {
         if (s.phase !== 'main') return fail('Not now');
@@ -366,6 +369,7 @@ export function applyAction(s, p, a) {
         pay(P, COST.road);
         s.eOwn[e] = p;
         P.left.road--;
+        log(s, `@${p} built a road`);
       }
       updateLongest(s);
       break;

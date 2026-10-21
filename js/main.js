@@ -29,7 +29,6 @@ let size = store.get('tinysettler.size') || 'small';
 const name = p => (p === me ? 'You' : oppLabel);
 const color = p => (p === me ? COLORS.me : COLORS.opp);
 const myTurn = () => S && S.cur === me && S.winner < 0;
-const costStr = c => RES.filter(r => c[r]).map(r => ICON[r].repeat(c[r])).join('');
 const wsUrl = path => SERVER.replace(/^http/, 'ws').replace(/\/$/, '') + path;
 
 function toast(msg, ms = 1600) {
@@ -455,7 +454,7 @@ function banner() {
     case 'roads': return [`Place ${S.freeRoads} free road${S.freeRoads > 1 ? 's' : ''}`, 'Tap a glowing line.'];
     default:
       if (!hasAnyMove(S, me)) return ['Nothing you can do — passing…', 'You can’t afford anything this turn.'];
-      return ['Your turn', 'Build, trade or play a card. Press “End turn” when you’re done.'];
+      return ['Your turn', ''];
   }
 }
 
@@ -474,7 +473,7 @@ function buildCards(canAct) {
       `<span class="${i >= P.res[r] ? 'miss' : 'have'}" title="${RES_NAME[r]}">${ICON[r]}</span>`)).join('');
     let status, ok = false;
     if (!left) status = k === 'dev' ? 'Deck is empty' : 'None left';
-    else if (Object.keys(missing).length) status = `Need ${costStr(missing)}`;
+    else if (Object.keys(missing).length) status = ''; // the faded cost icons already show what's missing
     else if (!spots()) status = k === 'settlement' ? 'Build a road to a free corner first' : k === 'city' ? 'Build a settlement first' : 'No free spot';
     else { ok = true; status = k === 'dev' ? '👆 Tap to buy' : '👆 Tap here or a glowing spot'; }
     const active = canAct && ok;
@@ -543,7 +542,7 @@ function renderPanel() {
           return `<button class="res" data-give="${r}" ${can ? '' : 'disabled'} title="Give ${q} ${RES_NAME[r]} for any 1 resource">` +
             `${ICON[r]}<small>${q} → 1</small></button>`;
         }).join('');
-        $('trade').innerHTML = `<p class="note">Swap ${RES.some(r => ratio(S, me, r) < 4) ? 'resources at the rates shown (harbours give better rates)' : '4 of one kind for any 1 (harbours give better rates)'}:</p>${offers}`;
+        $('trade').innerHTML = offers;
       }
     }
   }
@@ -557,8 +556,9 @@ function renderPanel() {
 
   const canEnd = myTurn() && (S.phase === 'main' || S.phase === 'roads') && session && session.connected;
   $('endBtn').disabled = !canEnd;
-  $('endBtn').textContent = canEnd ? 'End turn' : S.winner >= 0 ? 'Game over' : myTurn() ? 'Finish the step above first' : `Waiting for ${name(S.cur)}…`;
+  $('endBtn').innerHTML = canEnd ? 'End turn <small class="key">⏎ Enter</small>' : S.winner >= 0 ? 'Game over' : myTurn() ? 'Finish the step above first' : `Waiting for ${name(S.cur)}…`;
   $('panel').classList.toggle('waiting', !myTurn());
+  $('panel').classList.toggle('yours', !!(myTurn() && session && session.connected));
 
   $('log').innerHTML = S.log.slice(-12).reverse()
     .map(l => `<li>${l.replace(/@(\d)/g, (_, p) => `<b style="color:${color(+p)}">${name(+p)}</b>`)}</li>`).join('');
@@ -670,6 +670,12 @@ document.querySelectorAll('.sizes button').forEach(b => b.addEventListener('clic
 }));
 
 $('botNow').addEventListener('click', startBot);
+// Enter ends your turn (unless you're typing, e.g. your name for the Hall of Fame).
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || e.target.closest('input, textarea') || !$('over').hidden || !$('help').hidden || !$('lobby').hidden) return;
+  e.preventDefault(); // otherwise Enter would re-press whichever button was clicked last
+  if (!e.repeat && !$('endBtn').disabled) dispatch({ t: 'end' });
+});
 $('helpBtn').addEventListener('click', () => { $('help').hidden = false; });
 $('help').addEventListener('click', e => { if (e.target.id === 'help' || e.target.closest('[data-close]')) $('help').hidden = true; });
 setInterval(tickTimer, 250);

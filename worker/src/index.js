@@ -6,11 +6,11 @@
 //
 // Routes (all WebSockets except /hof):
 //   /match?size=small|medium   wait for an opponent -> {k:'match', game, token}
-//   /bot?size=small|medium     start a game against the bot right away
+//   /bot?size=small|medium[&bot=botto]  start a game against the bot (or the strong Botto) right away
 //   /game?id=…&token=…         join (or rejoin) a game
 //   /hof                       GET the top 10
 import { DurableObject } from 'cloudflare:workers';
-import { newTable, act, step, refresh, viewFor } from '../../js/table.js';
+import { newTable, act, step, refresh, viewFor, BOT_NAMES } from '../../js/table.js';
 
 const SIZES = ['small', 'medium'];
 const GRACE_MS = 10000;          // a player who disconnects this long is replaced by the bot
@@ -39,7 +39,7 @@ export default {
       if (!SIZES.includes(size)) return new Response('Bad size', { status: 400 });
       const id = env.GAME.newUniqueId();
       const t = token();
-      await env.GAME.get(id).init({ mode: 'bot', size, tokens: [t, null] });
+      await env.GAME.get(id).init({ mode: 'bot', size, tokens: [t, null], bot: url.searchParams.get('bot') === 'botto' ? 'botto' : true });
       return env.GAME.get(id).fetch(new Request(`https://game/connect?token=${t}`, req));
     }
     if (url.pathname === '/game') {
@@ -89,12 +89,12 @@ export class Game extends DurableObject {
     return this.g;
   }
 
-  async init({ mode, size, tokens }) {
+  async init({ mode, size, tokens, bot = true }) {
     const now = Date.now();
     const human = [true, mode === 'online'];
     this.g = {
       mode, tokens, human,
-      t: newTable({ size, bots: human.map(h => !h), timed: mode === 'online', now }),
+      t: newTable({ size, bots: human.map(h => (h ? false : bot)), timed: mode === 'online', now }),
       // Online, a seat nobody has joined yet counts as gone. Against the bot the game just waits.
       gone: human.map(h => (h && mode === 'online' ? now : 0)),
       touched: now, hofDone: false,
@@ -132,7 +132,7 @@ export class Game extends DurableObject {
       this.send(ws, {
         k: 'state', seat, view: viewFor(g.t.s, seat),
         remaining: g.t.deadline ? Math.max(0, g.t.deadline - now) : 0,
-        opp: g.human[o] && !g.t.bots[o] ? 'Opponent' : 'Bot',
+        opp: g.human[o] && !g.t.bots[o] ? 'Opponent' : BOT_NAMES[g.t.bots[o]],
         online: g.mode === 'online',
       });
       if (extra && extra.seat !== seat) this.send(ws, extra.msg);
@@ -170,7 +170,7 @@ export class Game extends DurableObject {
 
     if (m.k === 'act') {
       const r = act(g.t, seat, m.a, now);
-      if (r.ok) this.broadcast();
+      if (r.ok) { this.broadcast(); await this.recordBotWin(); }
       else this.send(ws, { k: 'err', msg: r.err });
     } else if (m.k === 'name') {
       const s = g.t.s;
@@ -183,6 +183,17 @@ export class Game extends DurableObject {
       for (const o of this.ctx.getWebSockets()) this.send(o, this.seatOf(o) === seat ? { k: 'saved', hof } : { k: 'winner', name });
     }
     await this.save();
+  }
+
+  // When the bot beats a human, it goes into the Hall of Fame too.
+  async recordBotWin() {
+    const g = this.g, s = g.t.s;
+    if (g.mode !== 'bot' || s.winner < 0 || !g.t.bots[s.winner] || g.hofDone) return;
+    g.hofDone = true;
+    const hof = await this.env.HOF.get(this.env.HOF.idFromName('global')).add({
+      name: BOT_NAMES[g.t.bots[s.winner]], rounds: Math.ceil((s.turn + 1) / 2), vs: 'Human', size: s.size, date: new Date().toISOString(),
+    });
+    for (const o of this.ctx.getWebSockets()) this.send(o, { k: 'saved', hof });
   }
 
   async webSocketClose(ws, code) {
@@ -223,7 +234,7 @@ export class Game extends DurableObject {
       return;
     }
     if (step(g.t, now)) changed = true;
-    if (changed) this.broadcast(extra);
+    if (changed) { this.broadcast(extra); await this.recordBotWin(); }
     await this.save();
   }
 }

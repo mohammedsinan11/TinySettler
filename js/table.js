@@ -4,6 +4,10 @@
 // Everything here is plain JSON so the server can store it between messages.
 import { RES, newGame, applyAction, hasAnyMove, total } from './engine.js';
 import { botAct, autoAct } from './bot.js';
+import { bottoAct } from './botto.js';
+
+// A seat's bot: false (a human), true (the normal bot) or 'botto' (the strong one).
+export const BOT_NAMES = { true: 'Bot', botto: 'Botto' };
 
 export const TURN_MS = 60000, SHORT_MS = 30000;
 const PASS_MS = 1200; // speed rule: a player with nothing to do passes after this pause
@@ -42,7 +46,7 @@ export function step(t, now) {
   if (!t.autoAt || now < t.autoAt - 25) return false;
   const p = s.cur;
   let a;
-  if (t.bots[p]) { a = botAct(s, p); t.botRoll = s.rollId; }
+  if (t.bots[p]) { a = t.bots[p] === 'botto' ? bottoAct(s, p) : botAct(s, p); t.botRoll = s.rollId; }
   else if ((s.phase === 'main' || s.phase === 'roads') && !hasAnyMove(s, p)) a = { t: 'end' };
   else a = autoAct(s, p); // out of time
   if (!applyAction(s, p, a).ok) applyAction(s, p, autoAct(s, p)); // safety net

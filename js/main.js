@@ -1,7 +1,7 @@
 import {
   RES, COST, WIN_VP, DEV_NAMES, afford, vp, ratio, legalSettles, legalRoads, upgradable, hasAnyMove,
 } from './engine.js';
-import { newTable, act, step, viewFor, turnLength } from './table.js';
+import { newTable, act, step, viewFor, turnLength, BOT_NAMES } from './table.js';
 import { SERVER } from './config.js';
 import { installArt, ri, iconize, tileScene } from './art.js';
 
@@ -42,7 +42,13 @@ function toast(msg, ms = 1600) {
 
 // ---------- lobby / matchmaking ----------
 
+// Every second bot game is against Botto, the strong bot.
+const BOT_KEY = 'tinysettler.botGames';
+const nextBotIsBotto = () => (+store.get(BOT_KEY) || 0) % 2 === 1;
+let botKind = true;
+
 function showLobby() {
+  $('botNow').innerHTML = nextBotIsBotto() ? 'Play <b>Botto</b> now <small>(strong bot)</small>' : 'Play the bot now';
   $('over').hidden = true;
   $('lobby').hidden = false;
   document.querySelectorAll('.sizes button').forEach(b => b.classList.toggle('sel', b.dataset.size === size));
@@ -90,8 +96,11 @@ function cancelSearch() {
 
 function startBot() {
   cancelSearch();
+  botKind = nextBotIsBotto() ? 'botto' : true;
+  store.set(BOT_KEY, (+store.get(BOT_KEY) || 0) + 1);
+  if (botKind === 'botto') setTimeout(() => toast('💪 Botto challenges you — he plays much stronger!', 3500), 400);
   if (serverDown) startLocal();
-  else joinGame(`/bot?size=${size}`);
+  else joinGame(`/bot?size=${size}${botKind === 'botto' ? '&bot=botto' : ''}`);
 }
 
 function enterGame() {
@@ -119,11 +128,11 @@ function show(view, meta) {
 // ---------- offline game against a bot in the browser ----------
 
 function startLocal() {
-  const t = newTable({ size, bots: [false, true] });
+  const t = newTable({ size, bots: [false, botKind] });
   let timer = 0;
   const pump = () => {
     clearTimeout(timer);
-    show(viewFor(t.s, 0), { seat: 0, opp: 'Bot', online: false, remaining: 0 });
+    show(viewFor(t.s, 0), { seat: 0, opp: BOT_NAMES[botKind], online: false, remaining: 0 });
     if (t.autoAt) timer = setTimeout(() => { step(t, Date.now()); pump(); }, Math.max(0, t.autoAt - Date.now()));
   };
   session = {
@@ -588,7 +597,7 @@ function showOver() {
   $('overText').textContent = won
     ? `${vp(S, me)} points in ${Math.ceil((S.turn + 1) / 2)} rounds. ` +
       (offline ? 'This was an offline game, so it doesn’t count for the Hall of Fame.' : 'Enter your name for the Hall of Fame:')
-    : `${name(S.winner)} reached ${vp(S, S.winner)} points.${online && oppLabel !== 'Bot' ? ' Waiting for their name…' : ''}`;
+    : `${name(S.winner)} reached ${vp(S, S.winner)} points.${online && oppLabel !== 'Bot' ? ' Waiting for their name…' : !online && !offline ? ` ${oppLabel} goes into the Hall of Fame.` : ''}`;
   $('nameForm').hidden = !won || offline || savedResult;
   $('nameInput').value = store.get('tinysettler.name') || '';
   loadHof();

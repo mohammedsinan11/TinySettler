@@ -228,3 +228,24 @@ button.dev small { font-size: 11px; color: var(--muted); }
 .rules h1 { text-align: center; }
 .rules summary { cursor: pointer; color: var(--muted); }
 .rules ul { padding-left: 18px; margin: 0; display: grid; gap: 6px; line-height: 1.4; }
+
+/* little ships sailing by behind everything */
+#sea { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+#game { position: relative; z-index: 1; }
+.ship { position: absolute; left: 0; width: 46px; animation: sail linear infinite; }
+.ship svg { width: 100%; display: block; }
+.ship .bob { animation: bob 3.2s ease-in-out infinite; transform-origin: 50% 80%; }
+.ship::after { content: ""; position: absolute; left: -18px; bottom: 2px; width: 22px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.45); }
+.ship.s1 { top: 12%; animation-duration: 70s; animation-delay: -10s; }
+.ship.s2 { top: 34%; width: 36px; animation-duration: 95s; animation-delay: -55s; }
+.ship.s3 { top: 58%; animation-duration: 80s; animation-delay: -30s; animation-direction: reverse; }
+.ship.s3 .bob { scale: -1 1; }
+.ship.s3::after { left: auto; right: -18px; }
+.ship.s4 { top: 80%; width: 40px; animation-duration: 110s; animation-delay: -75s; }
+.ship.s5 { top: 92%; width: 32px; animation-duration: 88s; animation-delay: -5s; animation-direction: reverse; }
+.ship.s5 .bob { scale: -1 1; }
+.ship.s5::after { left: auto; right: -18px; }
+@keyframes sail { from { transform: translateX(-80px); } to { transform: translateX(calc(100vw + 80px)); } }
+@keyframes bob { 0%, 100% { transform: rotate(-4deg) translateY(0); } 50% { transform: rotate(4deg) translateY(-3px); } }
+@media (max-width: 800px) { .ship { width: 32px; } .ship.s2, .ship.s5 { width: 26px; } }
+@media (prefers-reduced-motion: reduce) { .ship, .ship .bob { animation: none; } .ship { display: none; } }

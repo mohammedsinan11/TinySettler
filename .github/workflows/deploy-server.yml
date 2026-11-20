@@ -5,7 +5,7 @@ name: Deploy game server
 on:
   push:
     branches: [main]
-    paths: ['worker/**', 'js/engine.js', 'js/bot.js', 'js/table.js', '.github/workflows/deploy-server.yml']
+    paths: ['worker/**', 'js/engine.js', 'js/bot.js', 'js/botto.js', 'js/table.js', '.github/workflows/deploy-server.yml']
   workflow_dispatch:
 
 jobs:

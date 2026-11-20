@@ -19,7 +19,7 @@ let oppLabel = 'Bot', oppBot = true, online = false;
 let session = null;      // the game in progress: { act, name, close, connected, local }
 let lobbyWs = null, serverDown = !SERVER;
 let tradeGive = null, plenty = null, buildMode = null;
-let deadline = 0, lastRoll = 0, savedResult = false, rematchOffered = false;
+let deadline = 0, lastRoll = 0, savedResult = false, rematchOffered = false, oppLeft = false;
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } },
@@ -113,7 +113,8 @@ function enterGame() {
   $('over').hidden = true;
   $('game').hidden = false;
   tradeGive = plenty = buildMode = null;
-  rematchOffered = false;
+  rematchOffered = oppLeft = false;
+  $('overNote').hidden = true;
   resetFx();
   savedResult = false;
   lastRoll = 0;
@@ -169,6 +170,7 @@ function joinGame(path) {
     emote(i) { send({ k: 'emote', e: i }); },
     rematch() { send({ k: 'rematch' }); },
     rematchAccept() { send({ k: 'rematchAccept' }); },
+    leave() { send({ k: 'leave' }); },
     close() {
       sess.closed = true;
       clearInterval(ping);
@@ -201,6 +203,7 @@ function joinGame(path) {
       else if (m.k === 'emote') showEmote(m.e, false);
       else if (m.k === 'rematchOffer') { rematchOffered = true; showRematchOffer(); }
       else if (m.k === 'rematch') toast(REMATCH_TOAST, 3000);
+      else if (m.k === 'oppLeft') { oppLeft = true; showOppLeft(); }
       else if (m.k === 'state') show(m.view, m);
       else if (m.k === 'err' || m.k === 'toast') { toast(m.msg, 2500); if (m.k === 'err') sfx.error(); }
       else if (m.k === 'winner') $('overText').textContent = `${m.name} won this one.`;
@@ -644,6 +647,7 @@ function showOver() {
   loadHof();
   $('over').hidden = false;
   if (rematchOffered) showRematchOffer();
+  if (oppLeft) showOppLeft();
   if (won && !offline) $('nameInput').focus();
 }
 
@@ -655,6 +659,16 @@ function showRematchOffer() {
   $('overText').textContent = `${name(1 - me)} wants a rematch: first to ${REMATCH_VP}, on a bigger island.`;
   $('acceptBtn').hidden = false;
   $('rematchBtn').hidden = true;
+}
+
+// The other player pressed "Play again" (or closed the page): no rematch possible any more.
+function showOppLeft() {
+  if ($('over').hidden || !S || S.winner < 0) return;
+  $('overNote').textContent = `👋 ${name(1 - me)} has left the game.`;
+  $('overNote').hidden = false;
+  $('rematchBtn').hidden = true;
+  $('acceptBtn').hidden = true;
+  sfx.emote();
 }
 
 $('rematchBtn').addEventListener('click', () => {
@@ -679,6 +693,7 @@ $('nameForm').addEventListener('submit', e => {
 });
 
 $('againBtn').addEventListener('click', () => {
+  if (session && session.leave) session.leave(); // tell the other player before we go
   if (session) session.close();
   session = null;
   S = null;

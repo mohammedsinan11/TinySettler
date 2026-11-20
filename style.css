@@ -276,3 +276,7 @@ button.dev small { font-size: 11px; color: var(--muted); }
 #rematchBtn { background: #c9f7d6; font-weight: 700; display: grid; gap: 1px; }
 #rematchBtn small { font-weight: 500; font-size: 12px; color: var(--muted); }
 #acceptBtn { animation: ready 1.2s ease-in-out infinite; }
+
+/* "X has left" notice on the game-over screen */
+.pop-note { margin: 0; padding: 10px 12px; border: 2.5px solid var(--line); border-radius: 12px; background: #fff1b0; font-weight: 700; animation: popNote .45s cubic-bezier(.3,1.8,.5,1); }
+@keyframes popNote { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }

@@ -195,6 +195,8 @@ export class Game extends DurableObject {
         g.rematchFrom = seat;
         for (const x of this.ctx.getWebSockets()) if (this.seatOf(x) === o) this.send(x, { k: 'rematchOffer' });
       }
+    } else if (m.k === 'leave') {
+      this.tellLeft(seat);
     } else if (m.k === 'rematchAccept') {
       if (g.t.s.winner >= 0 && g.rematchFrom === 1 - seat) this.startRematch(now);
     } else if (m.k === 'name') {
@@ -210,11 +212,22 @@ export class Game extends DurableObject {
     await this.save();
   }
 
+  // Let the other player know someone left after the game ended.
+  tellLeft(seat) {
+    const g = this.g;
+    if (g.t.s.winner < 0 || (g.leftSent || [])[seat]) return;
+    g.leftSent = g.leftSent || [];
+    g.leftSent[seat] = true;
+    if (g.rematchFrom === seat) g.rematchFrom = -1;
+    for (const x of this.ctx.getWebSockets()) if (this.seatOf(x) !== seat) this.send(x, { k: 'oppLeft' });
+  }
+
   startRematch(now) {
     const g = this.g;
     g.t = rematchTable(g.t, now);
     g.hofDone = false;
     g.rematchFrom = -1;
+    g.leftSent = [];
     for (const x of this.ctx.getWebSockets()) this.send(x, { k: 'rematch' });
     this.broadcast();
   }
@@ -237,6 +250,7 @@ export class Game extends DurableObject {
     const seat = this.seatOf(ws);
     if (seat >= 0 && g.mode === 'online' && !this.openSeat(seat, ws)) {
       g.gone[seat] = Date.now();
+      if (g.t.s.winner >= 0) this.tellLeft(seat); // after the game, leaving means no rematch
       await this.save();
     }
   }

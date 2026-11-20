@@ -1,10 +1,14 @@
 // Game sounds, synthesised with the Web Audio API (no sound files to load).
-// Browsers only allow audio after the player has interacted with the page,
-// so the audio context is created on the first tap or key press.
+// Phones only allow audio after a real tap: Android counts the finger being
+// lifted (not put down), and iOS also needs a sound to start inside that tap.
+// So every tap tries to unlock audio until it works.
 const KEY = 'tinysettler.muted';
 let ctx = null, master = null;
 let muted = false;
 try { muted = localStorage.getItem(KEY) === '1'; } catch { /* storage unavailable */ }
+
+// Let the sounds play even when the iPhone's silent switch is on (Safari 16.4+).
+try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch { /* not supported */ }
 
 function audio() {
   if (!ctx) {
@@ -15,10 +19,29 @@ function audio() {
     master.gain.value = 0.55;
     master.connect(ctx.destination);
   }
-  if (ctx.state === 'suspended') ctx.resume();
+  if (ctx.state !== 'running') ctx.resume().catch(() => {});
   return ctx;
 }
-['pointerdown', 'keydown'].forEach(ev => window.addEventListener(ev, () => audio(), { once: true, capture: true }));
+
+function unlock() {
+  const a = audio();
+  if (!a) return;
+  // A silent, one-sample sound started inside the tap opens the audio channel on iOS.
+  const src = a.createBufferSource();
+  src.buffer = a.createBuffer(1, 1, 22050);
+  src.connect(a.destination);
+  src.start(0);
+  if (a.state === 'running') UNLOCK_EVENTS.forEach(ev => window.removeEventListener(ev, unlock, true));
+}
+const UNLOCK_EVENTS = ['pointerup', 'touchend', 'click', 'keydown'];
+UNLOCK_EVENTS.forEach(ev => window.addEventListener(ev, unlock, true));
+// iOS suspends audio after a call or when the app goes to the background.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && ctx && ctx.state !== 'running') {
+    ctx.resume().catch(() => {});
+    UNLOCK_EVENTS.forEach(ev => window.addEventListener(ev, unlock, true));
+  }
+});
 
 // One note: a pitch (optionally sliding to f2) with a quick attack and a soft fade.
 function tone({ f, f2 = f, type = 'sine', dur = 0.12, vol = 0.25, at = 0 }) {

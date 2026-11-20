@@ -257,7 +257,9 @@ button.dev small { font-size: 11px; color: var(--muted); }
 
 /* names */
 #nickInput { font: inherit; padding: 9px 12px; border-radius: 12px; border: 2.5px solid var(--line); text-align: center; }
-.pcard .nick { color: var(--ink); font-weight: 600; }
+.pcard .name { flex-wrap: wrap; row-gap: 2px; }
+.pcard .nick { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pcard .nick small { font-size: 11px; font-weight: 500; color: var(--muted); }
 .pcard .edit { padding: 0 5px; font-size: 12px; border-width: 1.5px; box-shadow: none; border-radius: 6px; line-height: 1.4; }
 
 /* emotes */
@@ -269,3 +271,8 @@ button.dev small { font-size: 11px; color: var(--muted); }
 .bubble.theirs { top: 70px; right: 24px; }
 .bubble.mine { bottom: 56px; right: 24px; }
 @keyframes bubble { 0% { transform: scale(.3); opacity: 0; } 12% { transform: scale(1.2); opacity: 1; } 20% { transform: scale(1); } 80% { opacity: 1; } 100% { transform: translateY(-30px); opacity: 0; } }
+
+/* rematch */
+#rematchBtn { background: #c9f7d6; font-weight: 700; display: grid; gap: 1px; }
+#rematchBtn small { font-weight: 500; font-size: 12px; color: var(--muted); }
+#acceptBtn { animation: ready 1.2s ease-in-out infinite; }

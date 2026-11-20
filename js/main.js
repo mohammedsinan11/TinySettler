@@ -1,7 +1,7 @@
 import {
   RES, COST, WIN_VP, DEV_NAMES, afford, vp, ratio, legalSettles, legalRoads, upgradable, hasAnyMove,
 } from './engine.js';
-import { newTable, act, step, viewFor, turnLength, BOT_NAMES } from './table.js';
+import { newTable, act, step, viewFor, turnLength, rematchTable, BOT_NAMES } from './table.js';
 import { SERVER } from './config.js';
 import { installArt, ri, iconize, tileScene } from './art.js';
 import { sfx, isMuted, setMuted } from './sound.js';
@@ -19,7 +19,7 @@ let oppLabel = 'Bot', oppBot = true, online = false;
 let session = null;      // the game in progress: { act, name, close, connected, local }
 let lobbyWs = null, serverDown = !SERVER;
 let tradeGive = null, plenty = null, buildMode = null;
-let deadline = 0, lastRoll = 0, savedResult = false;
+let deadline = 0, lastRoll = 0, savedResult = false, rematchOffered = false;
 const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch { /* storage unavailable */ } },
@@ -113,6 +113,7 @@ function enterGame() {
   $('over').hidden = true;
   $('game').hidden = false;
   tradeGive = plenty = buildMode = null;
+  rematchOffered = false;
   resetFx();
   savedResult = false;
   lastRoll = 0;
@@ -120,7 +121,8 @@ function enterGame() {
 
 // Called with every new view of the game.
 function show(view, meta) {
-  if ($('game').hidden) enterGame();
+  const restarted = S && S.winner >= 0 && view.winner < 0; // a rematch began
+  if ($('game').hidden || restarted) enterGame();
   S = view;
   me = meta.seat;
   oppLabel = meta.opp;
@@ -134,7 +136,7 @@ function show(view, meta) {
 // ---------- offline game against a bot in the browser ----------
 
 function startLocal() {
-  const t = newTable({ size, bots: [false, botKind] });
+  let t = newTable({ size, bots: [false, botKind] });
   let timer = 0;
   const pump = () => {
     clearTimeout(timer);
@@ -150,6 +152,7 @@ function startLocal() {
     },
     name() {},
     close() { clearTimeout(timer); },
+    rematch() { t = rematchTable(t); toast(REMATCH_TOAST, 3000); pump(); },
   };
   pump();
 }
@@ -164,6 +167,8 @@ function joinGame(path) {
     name(n) { send({ k: 'name', name: n }); },
     nick(n) { send({ k: 'nick', name: n }); },
     emote(i) { send({ k: 'emote', e: i }); },
+    rematch() { send({ k: 'rematch' }); },
+    rematchAccept() { send({ k: 'rematchAccept' }); },
     close() {
       sess.closed = true;
       clearInterval(ping);
@@ -194,6 +199,8 @@ function joinGame(path) {
         if (myNick()) send({ k: 'nick', name: myNick() });
       }
       else if (m.k === 'emote') showEmote(m.e, false);
+      else if (m.k === 'rematchOffer') { rematchOffered = true; showRematchOffer(); }
+      else if (m.k === 'rematch') toast(REMATCH_TOAST, 3000);
       else if (m.k === 'state') show(m.view, m);
       else if (m.k === 'err' || m.k === 'toast') { toast(m.msg, 2500); if (m.k === 'err') sfx.error(); }
       else if (m.k === 'winner') $('overText').textContent = `${m.name} won this one.`;
@@ -515,9 +522,9 @@ function renderPanel() {
     const P = S.players[p];
     const shown = p === me ? vp(S, p) : vp(S, p, false);
     return `<div class="pcard${S.cur === p && S.winner < 0 ? ' turn' : ''}" style="--who:${color(p)}">
-      <div class="name">${p === me ? `You${myNick() ? ` <span class="nick">· ${escapeHtml(myNick())}</span>` : ''} <button class="edit" data-nick title="Change your name">✎</button>` : nameHtml(p)}${S.cur === p && S.winner < 0 ? ' <span class="now">playing</span>' : ''}</div>
-      <div class="vp">${shown}<small> / ${WIN_VP} points</small></div>
-      <div class="bar"><div style="width:${Math.min(100, 100 * shown / WIN_VP)}%"></div></div>
+      <div class="name">${p === me ? `<span class="nick">${myNick() ? `${escapeHtml(myNick())} <small>(you)</small>` : 'You'}</span><button class="edit" data-nick title="Change your name">✎</button>` : `<span class="nick">${nameHtml(p)}</span>`}${S.cur === p && S.winner < 0 ? ' <span class="now">playing</span>' : ''}</div>
+      <div class="vp">${shown}<small> / ${S.winVp || WIN_VP} points</small></div>
+      <div class="bar"><div style="width:${Math.min(100, 100 * shown / (S.winVp || WIN_VP))}%"></div></div>
       <div class="meta"><span title="Resource cards in hand">🃏 ${P.hand}</span><span title="Development cards">📜 ${P.devCount}</span>
       <span title="Knights played">⚔️ ${P.knights}</span><span title="Longest road">🛣️ ${P.roadLen}</span></div>
       ${S.lr === p ? '<span class="badge" title="5+ roads in a row: +2 points">Longest Road +2</span>' : ''}
@@ -629,10 +636,35 @@ function showOver() {
     : `${name(S.winner)} reached ${vp(S, S.winner)} points.${online && !oppBot ? ' Waiting for their name…' : !online && !offline ? ` ${oppLabel} goes into the Hall of Fame.` : ''}`;
   $('nameForm').hidden = !won || offline || savedResult;
   $('nameInput').value = store.get('tinysettler.name') || '';
+  // The loser can ask for a rematch: first to 10 on the same island with a new ring of tiles.
+  $('rematchBtn').hidden = won;
+  $('rematchBtn').disabled = false;
+  $('rematchBtn').innerHTML = `🔁 Offer a rematch <small>first to ${REMATCH_VP}, bigger island</small>`;
+  $('acceptBtn').hidden = true;
   loadHof();
   $('over').hidden = false;
+  if (rematchOffered) showRematchOffer();
   if (won && !offline) $('nameInput').focus();
 }
+
+const REMATCH_VP = 10;
+const REMATCH_TOAST = `🔁 Rematch! First to ${REMATCH_VP} points — new tiles around the island`;
+
+function showRematchOffer() {
+  if ($('over').hidden || !S || S.winner < 0) return; // shown once the game-over screen is up
+  $('overText').textContent = `${name(1 - me)} wants a rematch: first to ${REMATCH_VP}, on a bigger island.`;
+  $('acceptBtn').hidden = false;
+}
+
+$('rematchBtn').addEventListener('click', () => {
+  if (!session || !session.rematch) return;
+  session.rematch();
+  if (!session.local && !oppBot) {
+    $('rematchBtn').disabled = true;
+    $('rematchBtn').textContent = `Rematch offered — waiting for ${name(1 - me)}…`;
+  }
+});
+$('acceptBtn').addEventListener('click', () => { if (session && session.rematchAccept) session.rematchAccept(); });
 
 $('nameForm').addEventListener('submit', e => {
   e.preventDefault();

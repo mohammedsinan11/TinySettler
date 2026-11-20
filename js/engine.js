@@ -28,15 +28,21 @@ export const pips = n => (n ? 6 - Math.abs(7 - n) : 0);
 
 // ---------- board generation ----------
 
-function hexCoords(size) {
+// The centre hex(es) plus `rings` rings around them. A rematch adds a second ring.
+function hexCoords(size, rings = 1) {
   const centers = size === 'medium' ? [[0, 0], [1, 0]] : [[0, 0]];
-  const list = centers.slice();
+  let list = centers.slice(), frontier = centers.slice();
   const seen = new Set(list.map(c => c.join()));
-  for (const [q, r] of centers) {
-    for (const [dq, dr] of DIRS) {
-      const k = `${q + dq},${r + dr}`;
-      if (!seen.has(k)) { seen.add(k); list.push([q + dq, r + dr]); }
+  for (let ring = 0; ring < rings; ring++) {
+    const next = [];
+    for (const [q, r] of frontier) {
+      for (const [dq, dr] of DIRS) {
+        const k = `${q + dq},${r + dr}`;
+        if (!seen.has(k)) { seen.add(k); next.push([q + dq, r + dr]); }
+      }
     }
+    list = list.concat(next);
+    frontier = next;
   }
   return list;
 }
@@ -85,7 +91,8 @@ function placePorts(b, size) {
   };
   const coast = b.edges.map((_, i) => i).filter(i => b.edges[i].hexes.length === 1).sort((x, y) => ang(x) - ang(y));
   const specific = shuffle(RES.slice());
-  const types = shuffle(size === 'medium' ? ['any', 'any', specific[0], specific[1]] : ['any', 'any', specific[0]]);
+  const types = shuffle(b.hexes.length > 10 ? ['any', 'any', 'any', ...specific.slice(0, 3)]
+    : size === 'medium' ? ['any', 'any', specific[0], specific[1]] : ['any', 'any', specific[0]]);
   const off = rnd(coast.length);
   types.forEach((t, i) => {
     const e = b.edges[coast[(off + Math.round(i * coast.length / types.length)) % coast.length]];
@@ -93,6 +100,30 @@ function placePorts(b, size) {
     b.verts[e.a].port = t;
     b.verts[e.b].port = t;
   });
+}
+
+// The outer ring of a rematch island: the old tiles stay, new ones fill in around them.
+function growTiles(b, base) {
+  const old = new Map(base.map(h => [`${h.q},${h.r}`, h]));
+  const fresh = b.hexes.filter(h => !old.has(`${h.q},${h.r}`));
+  b.hexes.forEach(h => { const o = old.get(`${h.q},${h.r}`); if (o) { h.res = o.res; h.num = o.num; } });
+  // Even out the resources across the whole island.
+  const count = Object.fromEntries(RES.map(r => [r, base.filter(h => h.res === r).length]));
+  const res = [];
+  for (let i = 0; i < fresh.length; i++) {
+    const r = shuffle(RES.slice()).sort((x, y) => count[x] - count[y])[0];
+    count[r]++;
+    res.push(r);
+  }
+  shuffle(res);
+  const pool = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12];
+  const neighbours = b.edges.filter(e => e.hexes.length === 2).map(e => e.hexes);
+  const hot = n => n === 6 || n === 8;
+  for (let t = 0; t < 2000; t++) {
+    const nums = shuffle(pool.slice());
+    fresh.forEach((h, i) => { h.res = res[i]; h.num = nums[i % nums.length]; });
+    if (!neighbours.some(([x, y]) => hot(b.hexes[x].num) && hot(b.hexes[y].num))) break;
+  }
 }
 
 function assignTiles(b, size) {
@@ -119,16 +150,19 @@ function newPlayer() {
   };
 }
 
-export function newGame({ size = 'small', first = rnd(2) } = {}) {
-  const b = buildBoard(hexCoords(size));
+// `base`: the hexes of the previous game, for a rematch on a grown island.
+export function newGame({ size = 'small', first = rnd(2), base = null, winVp = WIN_VP } = {}) {
+  const big = !!base;
+  const b = buildBoard(hexCoords(size, big ? 2 : 1));
   placePorts(b, size);
-  assignTiles(b, size);
+  if (big) growTiles(b, base); // a rematch of a rematch keeps the same big island
+  else assignTiles(b, size);
   const deck = shuffle([
     ...Array(10).fill('knight'), ...Array(3).fill('vp'),
     ...Array(2).fill('roads'), ...Array(2).fill('plenty'),
   ]);
   return {
-    size, hexes: b.hexes, verts: b.verts, edges: b.edges,
+    size, big, winVp, hexes: b.hexes, verts: b.verts, edges: b.edges,
     robber: -1,
     vOwn: b.verts.map(() => -1), vCity: b.verts.map(() => false), eOwn: b.edges.map(() => -1),
     players: [newPlayer(), newPlayer()],
@@ -466,7 +500,7 @@ export function applyAction(s, p, a) {
       return fail('Unknown action');
   }
 
-  if (vp(s, p) >= WIN_VP) {
+  if (vp(s, p) >= (s.winVp || WIN_VP)) {
     s.winner = p;
     s.phase = 'over';
     log(s, `@${p} wins with ${vp(s, p)} points!`);

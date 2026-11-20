@@ -246,7 +246,7 @@ export function bottoAct(s, p, knobs = DEFAULTS) {
   if (!s.devPlayed) {
     const robberOnMe = s.robber >= 0 && s.hexes[s.robber].v.some(v => s.vOwn[v] === p);
     const armyClose = P.devs.includes('knight') && P.knights + 1 >= 3 && (s.la !== p) && P.knights + 1 > O.knights;
-    const winByArmy = armyClose && myVp + 2 >= WIN_VP;
+    const winByArmy = armyClose && myVp + 2 >= (s.winVp || WIN_VP);
     if (P.devs.includes('knight') && (robberOnMe || armyClose || winByArmy || total(O) >= K.knightOpp)) return { t: 'play', card: 'knight' };
     if (P.devs.includes('roads') && P.left.road >= 1 && roadTowardTarget() !== null && !spots.length) return { t: 'play', card: 'roads' };
     if (P.devs.includes('plenty')) {

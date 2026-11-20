@@ -12,8 +12,9 @@ export const BOT_NAMES = { true: 'Bot', botto: 'Botto' };
 export const TURN_MS = 60000, SHORT_MS = 30000;
 const PASS_MS = 1200; // speed rule: a player with nothing to do passes after this pause
 
-export function newTable({ size = 'small', bots = [false, false], timed = false, now = Date.now() } = {}) {
-  const t = { s: newGame({ size }), bots, timed, deadline: 0, dkey: '', botRoll: -1, autoAt: 0 };
+// `base`/`winVp`: a rematch on the previous island, grown by a ring of tiles.
+export function newTable({ size = 'small', bots = [false, false], timed = false, now = Date.now(), base = null, winVp } = {}) {
+  const t = { s: newGame({ size, base, winVp }), bots, timed, deadline: 0, dkey: '', botRoll: -1, autoAt: 0 };
   refresh(t, now);
   return t;
 }
@@ -66,4 +67,11 @@ export function viewFor(s, seat) {
       return { ...P, res: Object.fromEntries(RES.map(r => [r, 0])), devs: [], fresh: [], vpCards: 0, hand, devCount };
     }),
   };
+}
+
+export const REMATCH_VP = 10;
+
+// A rematch: same seats and bots, the old island plus a ring of new tiles, first to 10.
+export function rematchTable(t, now = Date.now()) {
+  return newTable({ size: t.s.size, bots: t.bots.slice(), timed: t.timed, now, base: t.s.hexes, winVp: REMATCH_VP });
 }

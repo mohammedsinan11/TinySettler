@@ -10,7 +10,7 @@
 //   /game?id=…&token=…         join (or rejoin) a game
 //   /hof                       GET the top 10
 import { DurableObject } from 'cloudflare:workers';
-import { newTable, act, step, refresh, viewFor, BOT_NAMES } from '../../js/table.js';
+import { newTable, act, step, refresh, viewFor, rematchTable, BOT_NAMES } from '../../js/table.js';
 
 const SIZES = ['small', 'medium'];
 const GRACE_MS = 10000;          // a player who disconnects this long is replaced by the bot
@@ -185,17 +185,38 @@ export class Game extends DurableObject {
       if (e < 0 || e > 5 || now - g.lastEmote[seat] < 1000) return;
       g.lastEmote[seat] = now;
       for (const o of this.ctx.getWebSockets()) if (this.seatOf(o) !== seat) this.send(o, { k: 'emote', e });
+    } else if (m.k === 'rematch') {
+      // The loser offers a rematch; a bot accepts straight away, a person has to agree.
+      const s = g.t.s, o = 1 - seat;
+      if (s.winner < 0 || s.winner === seat) return;
+      if (g.t.bots[o]) this.startRematch(now);
+      else if (!this.openSeat(o)) this.send(ws, { k: 'toast', msg: 'Your opponent has left' });
+      else {
+        g.rematchFrom = seat;
+        for (const x of this.ctx.getWebSockets()) if (this.seatOf(x) === o) this.send(x, { k: 'rematchOffer' });
+      }
+    } else if (m.k === 'rematchAccept') {
+      if (g.t.s.winner >= 0 && g.rematchFrom === 1 - seat) this.startRematch(now);
     } else if (m.k === 'name') {
       const s = g.t.s;
       const name = String(m.name || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 20);
       if (s.winner !== seat || g.t.bots[seat] || g.hofDone || !name) return;
       g.hofDone = true;
       const hof = await this.env.HOF.get(this.env.HOF.idFromName('global')).add({
-        name, rounds: Math.ceil((s.turn + 1) / 2), vs: g.mode === 'online' ? 'Human' : BOT_NAMES[g.t.bots[1 - seat]] || 'Bot', size: s.size, date: new Date().toISOString(),
+        name, rounds: Math.ceil((s.turn + 1) / 2), vs: g.mode === 'online' ? 'Human' : BOT_NAMES[g.t.bots[1 - seat]] || 'Bot', size: s.big ? `${s.size}, rematch` : s.size, date: new Date().toISOString(),
       });
       for (const o of this.ctx.getWebSockets()) this.send(o, this.seatOf(o) === seat ? { k: 'saved', hof } : { k: 'winner', name });
     }
     await this.save();
+  }
+
+  startRematch(now) {
+    const g = this.g;
+    g.t = rematchTable(g.t, now);
+    g.hofDone = false;
+    g.rematchFrom = -1;
+    for (const x of this.ctx.getWebSockets()) this.send(x, { k: 'rematch' });
+    this.broadcast();
   }
 
   // When the bot beats a human, it goes into the Hall of Fame too.
@@ -204,7 +225,7 @@ export class Game extends DurableObject {
     if (g.mode !== 'bot' || s.winner < 0 || !g.t.bots[s.winner] || g.hofDone) return;
     g.hofDone = true;
     const hof = await this.env.HOF.get(this.env.HOF.idFromName('global')).add({
-      name: BOT_NAMES[g.t.bots[s.winner]], rounds: Math.ceil((s.turn + 1) / 2), vs: 'Human', size: s.size, date: new Date().toISOString(),
+      name: BOT_NAMES[g.t.bots[s.winner]], rounds: Math.ceil((s.turn + 1) / 2), vs: 'Human', size: s.big ? `${s.size}, rematch` : s.size, date: new Date().toISOString(),
     });
     for (const o of this.ctx.getWebSockets()) this.send(o, { k: 'saved', hof });
   }

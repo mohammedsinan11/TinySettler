@@ -205,11 +205,16 @@ export class Game extends DurableObject {
       if (s.winner !== seat || g.t.bots[seat] || g.hofDone || !name) return;
       g.hofDone = true;
       const hof = await this.env.HOF.get(this.env.HOF.idFromName('global')).add({
-        name, rounds: Math.ceil((s.turn + 1) / 2), vs: g.mode === 'online' ? 'Human' : BOT_NAMES[g.t.bots[1 - seat]] || 'Bot', size: s.big ? `${s.size}, rematch` : s.size, date: new Date().toISOString(),
+        name, rounds: Math.ceil((s.turn + 1) / 2), vs: g.mode === 'online' ? this.playerName(1 - seat) : BOT_NAMES[g.t.bots[1 - seat]] || 'Bot', size: s.big ? `${s.size}, rematch` : s.size, date: new Date().toISOString(),
       });
       for (const o of this.ctx.getWebSockets()) this.send(o, this.seatOf(o) === seat ? { k: 'saved', hof } : { k: 'winner', name });
     }
     await this.save();
+  }
+
+  // A player's chosen name for the Hall of Fame ("Guest" if they never set one).
+  playerName(seat) {
+    return (this.g.names && this.g.names[seat]) || 'Guest';
   }
 
   // Let the other player know someone left after the game ended.
@@ -238,7 +243,7 @@ export class Game extends DurableObject {
     if (g.mode !== 'bot' || s.winner < 0 || !g.t.bots[s.winner] || g.hofDone) return;
     g.hofDone = true;
     const hof = await this.env.HOF.get(this.env.HOF.idFromName('global')).add({
-      name: BOT_NAMES[g.t.bots[s.winner]], rounds: Math.ceil((s.turn + 1) / 2), vs: 'Human', size: s.big ? `${s.size}, rematch` : s.size, date: new Date().toISOString(),
+      name: BOT_NAMES[g.t.bots[s.winner]], rounds: Math.ceil((s.turn + 1) / 2), vs: this.playerName(1 - s.winner), size: s.big ? `${s.size}, rematch` : s.size, date: new Date().toISOString(),
     });
     for (const o of this.ctx.getWebSockets()) this.send(o, { k: 'saved', hof });
   }

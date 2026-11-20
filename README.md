@@ -13,7 +13,7 @@ Open the page and you're matched with a random online opponent within ~9 seconds
 - **Scoring:** settlement 1, city 2, Longest Road (5+) 2, Largest Army (3+ knights) 2, Victory Point cards 1.
 - **Online:** 60 s per turn (30 s for setup and robber moves). If your opponent is gone for 10 s, the bot takes over their seat (they get it back if they reconnect).
 - **Bots:** every second bot game is against **Botto**, a stronger bot that goes for Longest Road and Largest Army, steers its roads to the best free corners and trades towards its goals. In self-play it beats the normal bot in roughly 6 of 10 games.
-- **Rematch:** the loser can offer a rematch (a bot accepts at once, a person has to agree). It's played to **10 points** on the same island with a new ring of tiles around it (19 tiles on the small map, 24 on the medium one).
+- **Rematch:** either player can offer a rematch (a bot accepts at once, a person has to agree). It's played to **10 points** on the same island with a new ring of tiles around it (19 tiles on the small map, 24 on the medium one).
 - **Online extras:** pick a name in the lobby (or change it any time with ✎ in the game) and send your opponent quick emoji reactions.
 - **Sound:** clicks and game sounds are synthesised in the browser (no sound files); the 🔊 button mutes them.
 - After a win you can enter your name in the shared **Hall of Fame** (fastest wins). When a bot beats you, it gets an entry too.

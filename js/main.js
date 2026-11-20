@@ -636,8 +636,8 @@ function showOver() {
     : `${name(S.winner)} reached ${vp(S, S.winner)} points.${online && !oppBot ? ' Waiting for their name…' : !online && !offline ? ` ${oppLabel} goes into the Hall of Fame.` : ''}`;
   $('nameForm').hidden = !won || offline || savedResult;
   $('nameInput').value = store.get('tinysettler.name') || '';
-  // The loser can ask for a rematch: first to 10 on the same island with a new ring of tiles.
-  $('rematchBtn').hidden = won;
+  // Either player can ask for a rematch: first to 10 on the same island with a new ring of tiles.
+  $('rematchBtn').hidden = false;
   $('rematchBtn').disabled = false;
   $('rematchBtn').innerHTML = `🔁 Offer a rematch <small>first to ${REMATCH_VP}, bigger island</small>`;
   $('acceptBtn').hidden = true;
@@ -654,6 +654,7 @@ function showRematchOffer() {
   if ($('over').hidden || !S || S.winner < 0) return; // shown once the game-over screen is up
   $('overText').textContent = `${name(1 - me)} wants a rematch: first to ${REMATCH_VP}, on a bigger island.`;
   $('acceptBtn').hidden = false;
+  $('rematchBtn').hidden = true;
 }
 
 $('rematchBtn').addEventListener('click', () => {

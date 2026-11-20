@@ -186,10 +186,10 @@ export class Game extends DurableObject {
       g.lastEmote[seat] = now;
       for (const o of this.ctx.getWebSockets()) if (this.seatOf(o) !== seat) this.send(o, { k: 'emote', e });
     } else if (m.k === 'rematch') {
-      // The loser offers a rematch; a bot accepts straight away, a person has to agree.
+      // Either player can offer a rematch; a bot accepts straight away, a person has to agree.
       const s = g.t.s, o = 1 - seat;
-      if (s.winner < 0 || s.winner === seat) return;
-      if (g.t.bots[o]) this.startRematch(now);
+      if (s.winner < 0) return;
+      if (g.t.bots[o] || g.rematchFrom === o) this.startRematch(now); // both asked: just start
       else if (!this.openSeat(o)) this.send(ws, { k: 'toast', msg: 'Your opponent has left' });
       else {
         g.rematchFrom = seat;

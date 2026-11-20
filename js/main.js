@@ -653,8 +653,41 @@ function showOver() {
   $('over').hidden = false;
   if (rematchOffered) showRematchOffer();
   if (oppLeft) showOppLeft();
+  // A bot that beats you gets to gloat a little.
+  const lines = !won && oppBot ? TAUNTS[oppLabel] || TAUNTS.Bot : null;
+  $('taunt').hidden = !lines;
+  if (lines) {
+    $('taunt').innerHTML = `<b>${escapeHtml(oppLabel)}:</b> “${escapeHtml(lines[Math.floor(Math.random() * lines.length)])}”`;
+    const b = document.createElement('div');
+    b.className = 'bubble theirs';
+    b.innerHTML = `😏<small>${escapeHtml(oppLabel)}</small>`;
+    $('boardWrap').appendChild(b);
+    setTimeout(() => b.remove(), 2600);
+  }
   if (won && !offline) $('nameInput').focus();
 }
+
+// Friendly trash talk when a bot beats you.
+const TAUNTS = {
+  Bot: [
+    'Beep boop. GG, human. Mostly G for me.',
+    'Calculating your chances… done. It was 0%.',
+    'I don\u2019t even have hands and I still out-built you.',
+    'My roads, my rules. 🛣️',
+    'Maybe settle next to some actual numbers next time?',
+    'I\u2019d say “close game”, but I don\u2019t like lying.',
+    'Don\u2019t worry, the sheep still like you. 🐑',
+  ],
+  Botto: [
+    'Botto never loses. Botto only collects. 💪',
+    'That was my warm-up. Want to see the real Botto?',
+    'You played like a 2 or a 12: rare and not very useful.',
+    'I took your sheep, your roads and your Longest Road. 🐑',
+    'Rematch? Sure. You\u2019ll need the bigger island.',
+    'Botto has met sheep with better strategy.',
+    'Next time I\u2019ll play with one circuit tied behind my back.',
+  ],
+};
 
 const REMATCH_VP = 10;
 const REMATCH_TOAST = `🔁 Rematch! First to ${REMATCH_VP} points — new tiles around the island`;

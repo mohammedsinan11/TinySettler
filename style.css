@@ -280,3 +280,8 @@ button.dev small { font-size: 11px; color: var(--muted); }
 /* "X has left" notice on the game-over screen */
 .pop-note { margin: 0; padding: 10px 12px; border: 2.5px solid var(--line); border-radius: 12px; background: #fff1b0; font-weight: 700; animation: popNote .45s cubic-bezier(.3,1.8,.5,1); }
 @keyframes popNote { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* a bot's victory speech */
+.taunt { position: relative; margin: 4px 0 6px; padding: 10px 14px; background: #fff; border: 2.5px solid var(--line); border-radius: 16px; box-shadow: 3px 3px 0 #1b1b1b; font-size: 15px; text-align: left; animation: popNote .45s cubic-bezier(.3,1.8,.5,1); }
+.taunt b { color: var(--opp); }
+.taunt::before { content: ""; position: absolute; top: -10px; left: 28px; width: 16px; height: 16px; background: #fff; border-left: 2.5px solid var(--line); border-top: 2.5px solid var(--line); transform: rotate(45deg); }

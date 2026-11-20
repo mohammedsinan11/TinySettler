@@ -223,27 +223,31 @@ export function vp(s, p, includeHidden = true) {
   return n;
 }
 
-export function roadLength(s, p) {
-  let best = 0;
-  const used = new Set();
-  const dfs = (v, len) => {
-    if (len > best) best = len;
-    if (len > 0 && s.vOwn[v] !== -1 && s.vOwn[v] !== p) return;
+// Longest continuous road of player p: a single trail (no branches), which can't pass
+// through an opponent's building. Returns its length and the edges it uses.
+export function longestRoad(s, p) {
+  let best = [];
+  const used = [];
+  const dfs = v => {
+    if (used.length > best.length) best = used.slice();
+    if (used.length > 0 && s.vOwn[v] !== -1 && s.vOwn[v] !== p) return;
     for (const e of s.verts[v].edges) {
-      if (s.eOwn[e] !== p || used.has(e)) continue;
-      used.add(e);
+      if (s.eOwn[e] !== p || used.includes(e)) continue;
+      used.push(e);
       const { a, b } = s.edges[e];
-      dfs(a === v ? b : a, len + 1);
-      used.delete(e);
+      dfs(a === v ? b : a);
+      used.pop();
     }
   };
   s.eOwn.forEach((o, e) => {
     if (o !== p) return;
-    dfs(s.edges[e].a, 0);
-    dfs(s.edges[e].b, 0);
+    dfs(s.edges[e].a);
+    dfs(s.edges[e].b);
   });
-  return best;
+  return { len: best.length, edges: best };
 }
+
+export const roadLength = (s, p) => longestRoad(s, p).len;
 
 // Can player p do anything at all on their main phase? Used to auto-pass the turn.
 export function hasAnyMove(s, p) {

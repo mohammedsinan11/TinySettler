@@ -1,5 +1,5 @@
 import {
-  RES, COST, WIN_VP, DEV_NAMES, afford, vp, ratio, legalSettles, legalRoads, upgradable, hasAnyMove,
+  RES, COST, WIN_VP, DEV_NAMES, afford, vp, ratio, legalSettles, legalRoads, upgradable, hasAnyMove, longestRoad,
 } from './engine.js';
 import { newTable, act, step, viewFor, turnLength, rematchTable, BOT_NAMES } from './table.js';
 import { SERVER } from './config.js';
@@ -284,8 +284,11 @@ function trackChanges() {
     if (S.robber !== prev.robber && S.robber >= 0) sfx.robber();
     if (devs > prev.devs) sfx.card();
     if (S.cur === me && prev.cur !== me && S.winner < 0) setTimeout(sfx.turn, rolled ? ROLL_MS + 250 : 0);
+    const takes = p => (p === me ? 'You take' : `${name(p)} takes`);
+    if (S.lr !== prev.lr && S.lr >= 0) { toast(`🛣️ ${takes(S.lr)} Longest Road (+2)!`, 2800); sfx.card(); }
+    if (S.la !== prev.la && S.la >= 0) { toast(`⚔️ ${takes(S.la)} Largest Army (+2)!`, 2800); sfx.card(); }
   }
-  prev = { robber: S.robber, cur: S.cur, devs };
+  prev = { robber: S.robber, cur: S.cur, devs, lr: S.lr, la: S.la };
 }
 
 function render() {
@@ -412,7 +415,8 @@ function renderBoard() {
     out.push('</g></g>');
   });
 
-  // roads
+  // roads; the stretch that counts for Longest Road gets a gold stripe
+  const lrEdges = new Set(S.lr >= 0 ? longestRoad(S, S.lr).edges : []);
   S.edges.forEach((e, i) => {
     const o = S.eOwn[i];
     if (o < 0) return;
@@ -421,7 +425,8 @@ function renderBoard() {
     const pop = fxStyle(`e${i}`, 700);
     out.push(`<g class="road${pop ? ' pop' : ''}"${pop ? ` style="${pop}"` : ''}>` +
       `<line ${c} stroke-width="12" stroke-linecap="round" ${SHADOW}/><line ${c} stroke="#1f1a17" stroke-width="12" stroke-linecap="round"/><line ${c} stroke="${color(o)}" stroke-width="8" stroke-linecap="round"/>` +
-      `<line ${c} stroke="#fff" stroke-opacity=".35" stroke-width="2.5" stroke-linecap="round" transform="translate(0,-1.5)"/></g>`);
+      (lrEdges.has(i) ? `<line ${c} stroke="#ffc928" stroke-width="3.2" stroke-linecap="round"/>`
+        : `<line ${c} stroke="#fff" stroke-opacity=".35" stroke-width="2.5" stroke-linecap="round" transform="translate(0,-1.5)"/>`) + '</g>');
     if (pop) out.push(`<line class="flash" ${c} style="${pop}" stroke="${color(o)}"/>`);
   });
 
@@ -529,7 +534,7 @@ function renderPanel() {
       <div class="vp">${shown}<small> / ${S.winVp || WIN_VP} points</small></div>
       <div class="bar"><div style="width:${Math.min(100, 100 * shown / (S.winVp || WIN_VP))}%"></div></div>
       <div class="meta"><span title="Resource cards in hand">🃏 ${P.hand}</span><span title="Development cards">📜 ${P.devCount}</span>
-      <span title="Knights played">⚔️ ${P.knights}</span><span title="Longest road">🛣️ ${P.roadLen}</span></div>
+      <span title="Knights played">⚔️ ${P.knights}</span><span title="Longest continuous road (branches don't count; 5+ for Longest Road)">🛣️ ${P.roadLen}</span></div>
       ${S.lr === p ? '<span class="badge" title="5+ roads in a row: +2 points">Longest Road +2</span>' : ''}
       ${S.la === p ? '<span class="badge" title="3+ knights played: +2 points">Largest Army +2</span>' : ''}
     </div>`;

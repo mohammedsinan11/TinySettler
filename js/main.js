@@ -1,8 +1,9 @@
 import {
-  RES, ICON, COST, WIN_VP, DEV_NAMES, afford, vp, ratio, legalSettles, legalRoads, upgradable, hasAnyMove,
+  RES, COST, WIN_VP, DEV_NAMES, afford, vp, ratio, legalSettles, legalRoads, upgradable, hasAnyMove,
 } from './engine.js';
 import { newTable, act, step, viewFor, turnLength } from './table.js';
 import { SERVER } from './config.js';
+import { installArt, ri, iconize, tileScene } from './art.js';
 
 const $ = id => document.getElementById(id);
 const R = 60;                      // hex radius in SVG units
@@ -306,21 +307,8 @@ function targets() {
   return t;
 }
 
-// Tile textures. They live in their own hidden <svg> that is created once, so
-// the board can be redrawn without re-creating what its tiles refer to.
-const DEFS = `<defs>
-  <pattern id="tx-wood" width="26" height="24" patternUnits="userSpaceOnUse"><rect width="26" height="24" fill="#3fae49"/>
-    <path d="M6 18 L11 6 L16 18Z M17 22 L21 12 L25 22Z" fill="#23802e"/></pattern>
-  <pattern id="tx-brick" width="24" height="14" patternUnits="userSpaceOnUse"><rect width="24" height="14" fill="#f06a35"/>
-    <path d="M0 0.5H24M0 7.5H24M6 0V7M18 7V14" stroke="#b8441a" stroke-width="1.8"/></pattern>
-  <pattern id="tx-sheep" width="22" height="22" patternUnits="userSpaceOnUse"><rect width="22" height="22" fill="#b6e35a"/>
-    <path d="M3 8q2-4 4 0M13 18q2-4 4 0M15 5q1.5-3 3 0" stroke="#86b832" stroke-width="1.8" fill="none"/></pattern>
-  <pattern id="tx-wheat" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="12" height="12" fill="#ffd23f"/>
-    <path d="M0 3H12M0 9H12" stroke="#e9b318" stroke-width="2"/></pattern>
-  <pattern id="tx-ore" width="34" height="26" patternUnits="userSpaceOnUse"><rect width="34" height="26" fill="#a8b0bc"/>
-    <path d="M0 26 L11 8 L19 19 L25 11 L34 26Z" fill="#7d8592"/><path d="M11 8 L14 13 L11 12 L8 13Z" fill="#fff"/></pattern>
-</defs>`;
-document.body.insertAdjacentHTML('beforeend', `<svg width="0" height="0" style="position:absolute" aria-hidden="true">${DEFS}</svg>`);
+// Icons, textures and tile scenes live in a hidden <svg> created once (see art.js).
+installArt();
 // Cartoon shadow: a dark copy of a shape, nudged down and right.
 const SHADOW = 'fill="#1b1b1b" stroke="#1b1b1b" transform="translate(2 2.5)"';
 
@@ -355,7 +343,7 @@ function renderBoard() {
       `<line x1="${px}" y1="${py}" x2="${a.x * R}" y2="${a.y * R}"/><line x1="${px}" y1="${py}" x2="${b.x * R}" y2="${b.y * R}"/>` +
       `<circle cx="${px}" cy="${py}" r="19" ${SHADOW}/><circle cx="${px}" cy="${py}" r="19"/>` +
       (e.port === 'any' ? `<text x="${px}" y="${py}">${label}</text>`
-        : `<text x="${px}" y="${py - 6}" class="pi">${ICON[e.port]}</text><text x="${px}" y="${py + 9}" class="ps">${label}</text>`) + '</g>');
+        : `<use href="#ic-${e.port}" x="${px - 8}" y="${py - 15}" width="16" height="16"/><text x="${px}" y="${py + 9}" class="ps">${label}</text>`) + '</g>');
   });
 
   // tiles
@@ -364,11 +352,11 @@ function renderBoard() {
     const target = t.hexes.includes(i);
     const pts = ring(h, 0.97);
     out.push(`<g class="tile${target ? ' target' : ''}"${target ? ` data-h="${i}"` : ''}><title>${RES_NAME[h.res]} — produces on a roll of ${h.num}</title>` +
-      `<polygon class="hex" points="${pts}" fill="url(#tx-${h.res})"/>`);
+      `<polygon class="hex" points="${pts}" fill="url(#tx-${h.res})"/>` + tileScene(h.res, cx, cy, i * 7 + h.num) +
+      `<polygon points="${pts}" fill="url(#tileLight)" pointer-events="none"/><polygon class="bevel" points="${ring(h, 0.9)}"/>`);
     if (rollFx && h.num === sum && i !== S.robber) out.push(`<polygon class="prod" points="${pts}" style="${rollFx}"/>`);
     if (i === S.robber) out.push(`<polygon points="${pts}" fill="rgba(20,20,30,.38)" pointer-events="none"/>`);
     else if (picking && !target) out.push(`<polygon class="dim" points="${pts}"/>`);
-    out.push(`<text class="tileIcon" x="${cx}" y="${cy - R * 0.48}">${ICON[h.res]}</text>`);
     const hot = h.num === 6 || h.num === 8;
     const dots = 6 - Math.abs(7 - h.num);
     out.push(`<g pointer-events="none"><circle cx="${cx}" cy="${cy + 4}" r="18" ${SHADOW}/><circle class="token" cx="${cx}" cy="${cy + 4}" r="18"/>` +
@@ -470,7 +458,7 @@ function buildCards(canAct) {
     const missing = {};
     RES.forEach(r => { if ((cost[r] || 0) > P.res[r]) missing[r] = cost[r] - P.res[r]; });
     const icons = RES.flatMap(r => Array.from({ length: cost[r] || 0 }, (_, i) =>
-      `<span class="${i >= P.res[r] ? 'miss' : 'have'}" title="${RES_NAME[r]}">${ICON[r]}</span>`)).join('');
+      `<span class="${i >= P.res[r] ? 'miss' : 'have'}" title="${RES_NAME[r]}">${ri(r)}</span>`)).join('');
     let status, ok = false;
     if (!left) status = k === 'dev' ? 'Deck is empty' : 'None left';
     else if (Object.keys(missing).length) status = ''; // the faded cost icons already show what's missing
@@ -512,7 +500,7 @@ function renderPanel() {
   $('hand').innerHTML = RES.map(r => {
     const n = meP.res[r];
     const g = fxStyle(`gain-${r}`, 1600);
-    return `<div class="chip${n ? '' : ' zero'}" title="${RES_NAME[r]}"><span class="ic">${ICON[r]}</span><span class="n">${n}</span>` +
+    return `<div class="chip${n ? '' : ' zero'}" title="${RES_NAME[r]}"><span class="ic">${ri(r)}</span><span class="n">${n}</span>` +
       `<span class="rn">${RES_NAME[r]}</span>${g ? `<span class="gain" style="${g}">+${gains[r]}</span>` : ''}</div>`;
   }).join('');
 
@@ -525,22 +513,22 @@ function renderPanel() {
     if (plenty && !S.devPlayed && meP.devs.includes('plenty')) {
       tradeGive = null;
       tradeSec.querySelector('h4').textContent = '🎁 Year of Plenty';
-      $('trade').innerHTML = `<p class="note">Pick 2 resources${plenty.length ? `: ${plenty.map(r => ICON[r]).join('')} + …` : ''}</p>` +
-        RES.map(r => `<button class="res" data-pick="${r}">${ICON[r]}<small>${RES_NAME[r]}</small></button>`).join('') +
+      $('trade').innerHTML = `<p class="note">Pick 2 resources${plenty.length ? `: ${plenty.map(ri).join('')} + …` : ''}</p>` +
+        RES.map(r => `<button class="res" data-pick="${r}">${ri(r)}<small>${RES_NAME[r]}</small></button>`).join('') +
         '<button class="res cancel" data-cancel>Cancel</button>';
     } else {
       plenty = null;
       tradeSec.querySelector('h4').textContent = 'Trade with the bank';
       if (tradeGive && meP.res[tradeGive] >= ratio(S, me, tradeGive)) {
-        $('trade').innerHTML = `<p class="note">Give ${ICON[tradeGive].repeat(ratio(S, me, tradeGive))} and get 1 of:</p>` +
-          RES.filter(r => r !== tradeGive).map(r => `<button class="res" data-get="${r}">${ICON[r]}<small>${RES_NAME[r]}</small></button>`).join('') +
+        $('trade').innerHTML = `<p class="note">Give ${ri(tradeGive).repeat(ratio(S, me, tradeGive))} and get 1 of:</p>` +
+          RES.filter(r => r !== tradeGive).map(r => `<button class="res" data-get="${r}">${ri(r)}<small>${RES_NAME[r]}</small></button>`).join('') +
           '<button class="res cancel" data-cancel>Cancel</button>';
       } else {
         tradeGive = null;
         const offers = RES.map(r => {
           const q = ratio(S, me, r), can = meP.res[r] >= q;
           return `<button class="res" data-give="${r}" ${can ? '' : 'disabled'} title="Give ${q} ${RES_NAME[r]} for any 1 resource">` +
-            `${ICON[r]}<small>${q} → 1</small></button>`;
+            `${ri(r)}<small>${q} → 1</small></button>`;
         }).join('');
         $('trade').innerHTML = offers;
       }
@@ -561,7 +549,7 @@ function renderPanel() {
   $('panel').classList.toggle('yours', !!(myTurn() && session && session.connected));
 
   $('log').innerHTML = S.log.slice(-12).reverse()
-    .map(l => `<li>${l.replace(/@(\d)/g, (_, p) => `<b style="color:${color(+p)}">${name(+p)}</b>`)}</li>`).join('');
+    .map(l => `<li>${iconize(l).replace(/@(\d)/g, (_, p) => `<b style="color:${color(+p)}">${name(+p)}</b>`)}</li>`).join('');
 }
 
 function tickTimer() {

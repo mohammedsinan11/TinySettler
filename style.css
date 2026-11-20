@@ -19,7 +19,15 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
-body { background: repeating-linear-gradient(-45deg, #43c6ee 0 22px, #3bbbe4 22px 44px); background-attachment: fixed; }
+/* Sea: a soft gradient with little drawn waves. */
+body {
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='90' height='54'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='.22' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M8 16 q6 -6 12 0 t12 0'/%3E%3Cpath d='M53 42 q6 -6 12 0 t12 0'/%3E%3C/g%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 45% 35%, #5bcbf0 0%, #2ea6dc 45%, #1b7fb5 100%);
+  background-attachment: fixed;
+}
+/* drawn resource icons inside text and buttons */
+.ri { width: 1.25em; height: 1.25em; vertical-align: -0.28em; display: inline-block; }
 button { font: inherit; cursor: pointer; border: 2.5px solid var(--line); background: #fff; border-radius: 12px; padding: 8px 12px; color: var(--ink); box-shadow: var(--pop); }
 button:not(:disabled):active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #1b1b1b; }
 button:disabled { cursor: not-allowed; background: var(--off); color: var(--off-ink); border-color: #c9c2b5; box-shadow: none; }
@@ -67,7 +75,8 @@ button.primary:not(:disabled):hover { filter: brightness(1.05); }
 /* hand */
 #hand { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
 .chip { display: flex; flex-direction: column; align-items: center; padding: 5px 2px 4px; border-radius: 12px; position: relative; background: var(--card); border: 2.5px solid var(--line); }
-.chip .ic { font-size: 22px; line-height: 1.15; }
+.chip .ic { font-size: 22px; line-height: 1; height: 28px; }
+.chip .ic .ri { width: 28px; height: 28px; vertical-align: 0; }
 .chip .n { font-weight: 700; font-size: 19px; line-height: 1.05; }
 .chip .rn { font-size: 10.5px; color: var(--muted); font-weight: 500; }
 .chip.zero { background: var(--off); border-color: #c9c2b5; }
@@ -90,7 +99,8 @@ button.primary:not(:disabled):hover { filter: brightness(1.05); }
 @keyframes ready { 0%, 100% { box-shadow: 3px 3px 0 #1b1b1b, 0 0 0 3px rgba(37,184,90,.45); } 50% { box-shadow: 3px 3px 0 #1b1b1b, 0 0 0 7px rgba(37,184,90,.8); } }
 .bname { font-weight: 700; font-size: 14.5px; }
 .bwhat { font-size: 11px; color: var(--muted); }
-.bcost { font-size: 15px; letter-spacing: 1px; margin-top: 2px; }
+.bcost { font-size: 15px; margin-top: 2px; display: flex; gap: 1px; }
+.bcost .ri { width: 19px; height: 19px; vertical-align: 0; }
 .bcost .miss { opacity: .3; filter: grayscale(1); }
 .bstat { font-size: 11.5px; font-weight: 600; color: var(--off-ink); }
 .bstat:empty { display: none; }
@@ -102,6 +112,7 @@ button.primary:not(:disabled):hover { filter: brightness(1.05); }
 .note { width: 100%; margin: 0; font-size: 12.5px; color: var(--muted); }
 button.res { display: flex; flex-direction: column; align-items: center; min-width: 54px; padding: 5px 6px; font-size: 20px; line-height: 1.1; }
 button.res small { font-size: 10.5px; font-weight: 600; color: var(--muted); }
+button.res .ri { width: 26px; height: 26px; vertical-align: 0; }
 button.res:disabled { filter: grayscale(1); opacity: .6; }
 button.res:not(:disabled) { background: #c9f7d6; }
 button.res.cancel { font-size: 13px; justify-content: center; background: #fff; }
@@ -143,11 +154,10 @@ button.dev small { font-size: 11px; color: var(--muted); }
 .token { fill: #fff; stroke: #1b1b1b; stroke-width: 3; }
 .num { font-weight: 700; font-size: 21px; text-anchor: middle; dominant-baseline: central; fill: #1b1b1b; pointer-events: none; }
 .num.hot { fill: #e0261b; }
-.tileIcon { font-size: 25px; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.bevel { fill: none; stroke: #fff; stroke-opacity: .3; stroke-width: 2.5; pointer-events: none; }
 .port line { stroke: #1b1b1b; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 2 6; }
 .port circle { fill: #fff; stroke: #1b1b1b; stroke-width: 3; }
 .port text { font-size: 12px; font-weight: 700; text-anchor: middle; dominant-baseline: central; fill: #1b1b1b; }
-.port text.pi { font-size: 14px; }
 .port text.ps { font-size: 10px; }
 
 /* build targets: things you can tap pulse, the rest of the board is dimmed */

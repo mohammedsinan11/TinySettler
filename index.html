@@ -27,6 +27,8 @@
       <svg id="board" role="img" aria-label="Game board"></svg>
       <div id="dice" aria-live="polite"></div>
       <button id="helpBtn" title="How to play" aria-label="How to play">?</button>
+      <button id="soundBtn" title="Sound on/off" aria-label="Sound on/off">🔊</button>
+      <div id="round" aria-live="polite"></div>
       <div id="toast" aria-live="polite"></div>
     </section>
     <aside id="panel">
@@ -52,6 +54,7 @@
         <h4>Your development cards</h4>
         <div id="devs"></div>
       </section>
+      <div id="emotes" hidden></div>
       <button id="endBtn" class="primary" title="Shortcut: Enter">End turn</button>
       <details id="logBox" open>
         <summary>What happened</summary>
@@ -64,6 +67,7 @@
     <div class="card">
       <h1>🏝️ TinySettler</h1>
       <p class="tag">Speed Catan · 1v1 · first to <b>8</b> points</p>
+      <input id="nickInput" maxlength="16" placeholder="Your name (shown online)" autocomplete="nickname" aria-label="Your name">
       <div class="sizes">
         <button data-size="small">Small map</button>
         <button data-size="medium">Medium map</button>

@@ -132,7 +132,8 @@ export class Game extends DurableObject {
       this.send(ws, {
         k: 'state', seat, view: viewFor(g.t.s, seat),
         remaining: g.t.deadline ? Math.max(0, g.t.deadline - now) : 0,
-        opp: g.human[o] && !g.t.bots[o] ? 'Opponent' : BOT_NAMES[g.t.bots[o]],
+        opp: g.human[o] && !g.t.bots[o] ? ((g.names && g.names[o]) || 'Opponent') : BOT_NAMES[g.t.bots[o]],
+        oppBot: !(g.human[o] && !g.t.bots[o]),
         online: g.mode === 'online',
       });
       if (extra && extra.seat !== seat) this.send(ws, extra.msg);
@@ -172,13 +173,25 @@ export class Game extends DurableObject {
       const r = act(g.t, seat, m.a, now);
       if (r.ok) { this.broadcast(); await this.recordBotWin(); }
       else this.send(ws, { k: 'err', msg: r.err });
+    } else if (m.k === 'nick') {
+      // Letters, digits, spaces and _.- only, so it's safe to show anywhere.
+      const nick = String(m.name || '').replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 16);
+      g.names = g.names || [];
+      g.names[seat] = /^(bot|botto|you|opponent)$/i.test(nick) ? '' : nick;
+      this.broadcast();
+    } else if (m.k === 'emote') {
+      const e = m.e | 0;
+      g.lastEmote = g.lastEmote || [0, 0];
+      if (e < 0 || e > 5 || now - g.lastEmote[seat] < 1000) return;
+      g.lastEmote[seat] = now;
+      for (const o of this.ctx.getWebSockets()) if (this.seatOf(o) !== seat) this.send(o, { k: 'emote', e });
     } else if (m.k === 'name') {
       const s = g.t.s;
       const name = String(m.name || '').replace(/[\u0000-\u001f\u007f<>]/g, '').trim().slice(0, 20);
       if (s.winner !== seat || g.t.bots[seat] || g.hofDone || !name) return;
       g.hofDone = true;
       const hof = await this.env.HOF.get(this.env.HOF.idFromName('global')).add({
-        name, rounds: Math.ceil((s.turn + 1) / 2), vs: g.mode === 'online' ? 'Human' : 'Bot', size: s.size, date: new Date().toISOString(),
+        name, rounds: Math.ceil((s.turn + 1) / 2), vs: g.mode === 'online' ? 'Human' : BOT_NAMES[g.t.bots[1 - seat]] || 'Bot', size: s.size, date: new Date().toISOString(),
       });
       for (const o of this.ctx.getWebSockets()) this.send(o, this.seatOf(o) === seat ? { k: 'saved', hof } : { k: 'winner', name });
     }

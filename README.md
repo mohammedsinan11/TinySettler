@@ -13,6 +13,8 @@ Open the page and you're matched with a random online opponent within ~9 seconds
 - **Scoring:** settlement 1, city 2, Longest Road (5+) 2, Largest Army (3+ knights) 2, Victory Point cards 1.
 - **Online:** 60 s per turn (30 s for setup and robber moves). If your opponent is gone for 10 s, the bot takes over their seat (they get it back if they reconnect).
 - **Bots:** every second bot game is against **Botto**, a stronger bot that goes for Longest Road and Largest Army, steers its roads to the best free corners and trades towards its goals. In self-play it beats the normal bot in roughly 6 of 10 games.
+- **Online extras:** pick a name in the lobby (or change it any time with ✎ in the game) and send your opponent quick emoji reactions.
+- **Sound:** clicks and game sounds are synthesised in the browser (no sound files); the 🔊 button mutes them.
 - After a win you can enter your name in the shared **Hall of Fame** (fastest wins). When a bot beats you, it gets an entry too.
 
 ## No cheating
@@ -73,6 +75,7 @@ In the repo go to **Settings → Pages → Build and deployment**, set **Source*
 | `js/bot.js` | Greedy bot, which also makes the move for a player who runs out of time. |
 | `js/botto.js` | Botto, the strong bot. Its knobs (`DEFAULTS`) were tuned by self-play against the normal bot. |
 | `js/art.js` | Hand-drawn SVG icons, tile textures and tile scenes. |
+| `js/sound.js` | Game sounds made with the Web Audio API. |
 | `js/table.js` | Runs a game: bot turns, the turn clock, auto-passing, and the per-player view that hides the opponent's cards. Used by the server and by offline games. |
 | `js/main.js` | UI: an SVG board and side panel. Talks to the server over a WebSocket, or runs an offline bot game. |
 | `js/config.js` | The server address. |

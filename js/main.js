@@ -4,6 +4,7 @@ import {
 import { newTable, act, step, viewFor, turnLength, BOT_NAMES } from './table.js';
 import { SERVER } from './config.js';
 import { installArt, ri, iconize, tileScene } from './art.js';
+import { sfx, isMuted, setMuted } from './sound.js';
 
 const $ = id => document.getElementById(id);
 const R = 60;                      // hex radius in SVG units
@@ -14,7 +15,7 @@ const COLORS = { me: '#2f7de1', opp: '#e0533d' };
 // Without a server (or if it can't be reached) a bot game runs in the browser.
 let S = null;            // my view of the game
 let me = 0;              // my seat
-let oppLabel = 'Bot', online = false;
+let oppLabel = 'Bot', oppBot = true, online = false;
 let session = null;      // the game in progress: { act, name, close, connected, local }
 let lobbyWs = null, serverDown = !SERVER;
 let tradeGive = null, plenty = null, buildMode = null;
@@ -28,6 +29,10 @@ let size = store.get('tinysettler.size') || 'small';
 // ---------- helpers ----------
 
 const name = p => (p === me ? 'You' : oppLabel);
+const nameHtml = p => escapeHtml(name(p)); // the opponent picks their own name, so escape it in HTML
+const NAME_KEY = 'tinysettler.name';
+const myNick = () => (store.get(NAME_KEY) || '').trim();
+const EMOTES = ['👍', '😂', '😮', '😡', '🎉', '🤝'];
 const color = p => (p === me ? COLORS.me : COLORS.opp);
 const myTurn = () => S && S.cur === me && S.winner < 0;
 const wsUrl = path => SERVER.replace(/^http/, 'ws').replace(/\/$/, '') + path;
@@ -119,6 +124,7 @@ function show(view, meta) {
   S = view;
   me = meta.seat;
   oppLabel = meta.opp;
+  oppBot = meta.oppBot !== undefined ? meta.oppBot : !meta.online;
   online = meta.online;
   deadline = meta.remaining ? Date.now() + meta.remaining : 0;
   render();
@@ -139,7 +145,7 @@ function startLocal() {
     local: true, connected: true,
     act(a) {
       const r = act(t, 0, a, Date.now());
-      if (!r.ok) toast(r.err);
+      if (!r.ok) { toast(r.err); sfx.error(); }
       pump();
     },
     name() {},
@@ -156,6 +162,8 @@ function joinGame(path) {
     local: false, connected: false, closed: false,
     act(a) { send({ k: 'act', a }); },
     name(n) { send({ k: 'name', name: n }); },
+    nick(n) { send({ k: 'nick', name: n }); },
+    emote(i) { send({ k: 'emote', e: i }); },
     close() {
       sess.closed = true;
       clearInterval(ping);
@@ -181,9 +189,13 @@ function joinGame(path) {
       lastPong = Date.now();
       if (e.data === 'pong') return;
       const m = JSON.parse(e.data);
-      if (m.k === 'hello') url = wsUrl(`/game?id=${m.game}&token=${m.token}`); // where to reconnect
+      if (m.k === 'hello') {
+        url = wsUrl(`/game?id=${m.game}&token=${m.token}`); // where to reconnect
+        if (myNick()) send({ k: 'nick', name: myNick() });
+      }
+      else if (m.k === 'emote') showEmote(m.e, false);
       else if (m.k === 'state') show(m.view, m);
-      else if (m.k === 'err' || m.k === 'toast') toast(m.msg, 2500);
+      else if (m.k === 'err' || m.k === 'toast') { toast(m.msg, 2500); if (m.k === 'err') sfx.error(); }
       else if (m.k === 'winner') $('overText').textContent = `${m.name} won this one.`;
       else if (m.k === 'saved') renderHof(m.hof);
     };
@@ -226,7 +238,7 @@ const DEV_INFO = {
 // Short-lived effects (pop-ins, flashes). The board is redrawn often, so each
 // effect remembers when it started and resumes with a negative animation delay.
 const fx = new Map();
-let seen = null, prevRes = null, gains = {};
+let seen = null, prevRes = null, gains = {}, prev = null;
 function fxStart(key, after = 0) { fx.set(key, performance.now() + after); }
 function fxStyle(key, ms) {
   const t = fx.get(key);
@@ -234,7 +246,7 @@ function fxStyle(key, ms) {
   const age = performance.now() - t;
   return age < ms ? `animation-delay:${Math.round(-age)}ms` : null;
 }
-function resetFx() { fx.clear(); seen = null; prevRes = null; gains = {}; }
+function resetFx() { fx.clear(); seen = null; prevRes = null; gains = {}; prev = null; }
 
 // Notice what changed since the last view, so it can be animated.
 function trackChanges() {
@@ -242,18 +254,34 @@ function trackChanges() {
   const keys = new Set();
   S.vOwn.forEach((o, v) => { if (o >= 0) keys.add(`v${v}${S.vCity[v] ? 'c' : 's'}`); });
   S.eOwn.forEach((o, e) => { if (o >= 0) keys.add(`e${e}`); });
-  if (seen) for (const k of keys) if (!seen.has(k)) fxStart(k);
+  let built = false, road = false;
+  if (seen) for (const k of keys) if (!seen.has(k)) { fxStart(k); if (k[0] === 'e') road = true; else built = true; }
   seen = keys;
   // Tiles light up and cards arrive once the dice have landed.
   const rolled = !first && S.rollId !== lastRoll;
   if (rolled) fxStart('roll', ROLL_MS);
   const res = S.players[me].res;
-  if (!first) RES.forEach(r => { if (res[r] > prevRes[r]) { gains[r] = res[r] - prevRes[r]; fxStart(`gain-${r}`, rolled ? ROLL_MS : 0); } });
+  let gained = false;
+  if (!first) RES.forEach(r => { if (res[r] > prevRes[r]) { gains[r] = res[r] - prevRes[r]; gained = true; fxStart(`gain-${r}`, rolled ? ROLL_MS : 0); } });
   prevRes = { ...res };
+
+  // sounds
+  const devs = S.players[me].devCount;
+  if (prev) {
+    if (built) sfx.build(); else if (road) sfx.road();
+    if (rolled) sfx.dice();
+    if (gained) setTimeout(sfx.gain, rolled ? ROLL_MS : 0);
+    if (S.robber !== prev.robber && S.robber >= 0) sfx.robber();
+    if (devs > prev.devs) sfx.card();
+    if (S.cur === me && prev.cur !== me && S.winner < 0) setTimeout(sfx.turn, rolled ? ROLL_MS + 250 : 0);
+  }
+  prev = { robber: S.robber, cur: S.cur, devs };
 }
 
 function render() {
   trackChanges();
+  $('round').textContent = S.phase === 'setup' ? 'Setup' : `Round ${Math.floor(S.turn / 2) + 1}`;
+  $('emotes').hidden = !(online && !oppBot && session && session.connected);
   renderBoard();
   renderPanel();
   renderDice();
@@ -487,7 +515,7 @@ function renderPanel() {
     const P = S.players[p];
     const shown = p === me ? vp(S, p) : vp(S, p, false);
     return `<div class="pcard${S.cur === p && S.winner < 0 ? ' turn' : ''}" style="--who:${color(p)}">
-      <div class="name">${name(p)}${S.cur === p && S.winner < 0 ? ' <span class="now">playing</span>' : ''}</div>
+      <div class="name">${p === me ? `You${myNick() ? ` <span class="nick">· ${escapeHtml(myNick())}</span>` : ''} <button class="edit" data-nick title="Change your name">✎</button>` : nameHtml(p)}${S.cur === p && S.winner < 0 ? ' <span class="now">playing</span>' : ''}</div>
       <div class="vp">${shown}<small> / ${WIN_VP} points</small></div>
       <div class="bar"><div style="width:${Math.min(100, 100 * shown / WIN_VP)}%"></div></div>
       <div class="meta"><span title="Resource cards in hand">🃏 ${P.hand}</span><span title="Development cards">📜 ${P.devCount}</span>
@@ -553,12 +581,12 @@ function renderPanel() {
 
   const canEnd = myTurn() && (S.phase === 'main' || S.phase === 'roads') && session && session.connected;
   $('endBtn').disabled = !canEnd;
-  $('endBtn').innerHTML = canEnd ? 'End turn <small class="key">⏎ Enter</small>' : S.winner >= 0 ? 'Game over' : myTurn() ? 'Finish the step above first' : `Waiting for ${name(S.cur)}…`;
+  $('endBtn').innerHTML = canEnd ? 'End turn <small class="key">⏎ Enter</small>' : S.winner >= 0 ? 'Game over' : myTurn() ? 'Finish the step above first' : `Waiting for ${nameHtml(S.cur)}…`;
   $('panel').classList.toggle('waiting', !myTurn());
   $('panel').classList.toggle('yours', !!(myTurn() && session && session.connected));
 
   $('log').innerHTML = S.log.slice(-12).reverse()
-    .map(l => `<li>${iconize(l).replace(/@(\d)/g, (_, p) => `<b style="color:${color(+p)}">${name(+p)}</b>`)}</li>`).join('');
+    .map(l => `<li>${iconize(l).replace(/@(\d)/g, (_, p) => `<b style="color:${color(+p)}">${nameHtml(+p)}</b>`)}</li>`).join('');
 }
 
 function tickTimer() {
@@ -593,11 +621,12 @@ function showOver() {
   if (!S || S.winner < 0 || !$('over').hidden) return;
   const won = S.winner === me;
   const offline = session && session.local;
+  (won ? sfx.win : sfx.lose)();
   $('overTitle').textContent = won ? '🏆 You won!' : '😵 You lost';
   $('overText').textContent = won
     ? `${vp(S, me)} points in ${Math.ceil((S.turn + 1) / 2)} rounds. ` +
       (offline ? 'This was an offline game, so it doesn’t count for the Hall of Fame.' : 'Enter your name for the Hall of Fame:')
-    : `${name(S.winner)} reached ${vp(S, S.winner)} points.${online && oppLabel !== 'Bot' ? ' Waiting for their name…' : !online && !offline ? ` ${oppLabel} goes into the Hall of Fame.` : ''}`;
+    : `${name(S.winner)} reached ${vp(S, S.winner)} points.${online && !oppBot ? ' Waiting for their name…' : !online && !offline ? ` ${oppLabel} goes into the Hall of Fame.` : ''}`;
   $('nameForm').hidden = !won || offline || savedResult;
   $('nameInput').value = store.get('tinysettler.name') || '';
   loadHof();
@@ -676,6 +705,52 @@ document.addEventListener('keydown', e => {
 $('helpBtn').addEventListener('click', () => { $('help').hidden = false; });
 $('help').addEventListener('click', e => { if (e.target.id === 'help' || e.target.closest('[data-close]')) $('help').hidden = true; });
 setInterval(tickTimer, 250);
+
+// ---------- emotes, names, sound ----------
+
+function showEmote(i, mine) {
+  if (!EMOTES[i]) return;
+  sfx.emote();
+  const b = document.createElement('div');
+  b.className = `bubble ${mine ? 'mine' : 'theirs'}`;
+  b.innerHTML = `${EMOTES[i]}<small>${mine ? 'You' : nameHtml(1 - me)}</small>`;
+  $('boardWrap').appendChild(b);
+  setTimeout(() => b.remove(), 2600);
+}
+
+$('emotes').innerHTML = EMOTES.map((e, i) => `<button data-emote="${i}" title="Send ${e}">${e}</button>`).join('');
+let lastEmote = 0;
+$('emotes').addEventListener('click', e => {
+  const b = e.target.closest('[data-emote]');
+  if (!b || !session || !session.emote || Date.now() - lastEmote < 1200) return;
+  lastEmote = Date.now();
+  session.emote(+b.dataset.emote);
+  showEmote(+b.dataset.emote, true);
+});
+
+function setNick(n) {
+  n = n.replace(/[^\p{L}\p{N} _.-]/gu, '').trim().slice(0, 16);
+  store.set(NAME_KEY, n);
+  $('nickInput').value = n;
+  if (session && session.nick) session.nick(n);
+  if (S) renderPanel();
+}
+$('nickInput').value = myNick();
+$('nickInput').addEventListener('change', () => setNick($('nickInput').value));
+$('scores').addEventListener('click', e => {
+  if (!e.target.closest('[data-nick]')) return;
+  const n = prompt('Your name (shown to your opponent online):', myNick());
+  if (n !== null) setNick(n);
+});
+
+const soundIcon = () => { $('soundBtn').textContent = isMuted() ? '🔇' : '🔊'; };
+soundIcon();
+$('soundBtn').addEventListener('click', () => { setMuted(!isMuted()); soundIcon(); if (!isMuted()) sfx.click(); });
+// a satisfying click for every button and every spot you tap on the board
+document.addEventListener('pointerdown', e => {
+  const t = e.target.closest('button:not(:disabled):not([aria-disabled]), .vtarget, .etarget, .tile.target');
+  if (t && t.id !== 'soundBtn') sfx.click();
+}, true);
 
 // Debug hook for testing in the console.
 window.tinysettler = { get state() { return S; }, get seat() { return me; }, get session() { return session; } };
